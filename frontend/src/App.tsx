@@ -1,8 +1,10 @@
 import { startTransition, useEffect, useEffectEvent, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  DEFAULT_DOWNLOAD_OPTIONS,
   enqueueDownload,
   fetchDownloads,
+  getDirectDownloadHref,
   redownloadDownload,
   removeDownload,
   renameDownload,
@@ -29,7 +31,9 @@ import { searchVideos } from './api/search'
 import { getStreamUrl } from './api/streaming'
 import { createYouTubePlaylistExport } from './api/youtubePlaylists'
 import { AudioPlayer } from './components/AudioPlayer'
+import { DownloadOptionsDialog } from './components/DownloadOptionsDialog'
 import { DownloadQueuePanel } from './components/DownloadQueuePanel'
+import { VideoPlayerModal } from './components/VideoPlayerModal'
 import { VideoIcon, ListIcon, SunIcon, MoonIcon, MusicNoteIcon } from './components/Icons'
 import { PlaylistExportPanel } from './components/PlaylistExportPanel'
 import { PlaylistPanel } from './components/PlaylistPanel'
@@ -41,6 +45,7 @@ import { YouTubePlaylistDownloadPanel } from './components/YouTubePlaylistDownlo
 import type {
   DownloadJob,
   DiscordPresenceStatus,
+  DownloadOptions,
   DownloadRuntimeStatus,
   Playlist,
   PlaylistExportFormat,
@@ -51,6 +56,12 @@ import type {
 import './App.css'
 
 type PageId = 'video' | 'songs' | 'playlists' | 'playlist'
+type WatchTarget = {
+  videoId: string
+  title: string
+  channelTitle: string | null
+  sourceUrl: string | null
+}
 type ToastMessage = { id: number; message: string }
 type LoopMode = 'off' | 'once' | 'all'
 type PlayerTrack = {
@@ -121,6 +132,9 @@ function App() {
     null,
   )
   const [pendingExportRemovalIds, setPendingExportRemovalIds] = useState<string[]>([])
+  const [downloadOptionsVideo, setDownloadOptionsVideo] =
+    useState<VideoSearchResult | null>(null)
+  const [watchTarget, setWatchTarget] = useState<WatchTarget | null>(null)
 
   function pushToast(message: string) {
     const id = Date.now() + Math.random()
@@ -257,13 +271,37 @@ function App() {
     }
   })
 
-  async function handleDownload(video: VideoSearchResult) {
+  function startDeviceDownload(video: VideoSearchResult, options: DownloadOptions) {
+    // Navigating an anchor lets the browser stream the file straight to disk
+    // instead of buffering a whole video in memory first.
+    const link = document.createElement('a')
+    link.href = getDirectDownloadHref(video, options)
+    link.download = ''
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    pushToast(
+      `Preparing "${video.title}" for this device. The download starts once the file is ready.`,
+    )
+  }
+
+  async function handleDownload(
+    video: VideoSearchResult,
+    options: DownloadOptions = DEFAULT_DOWNLOAD_OPTIONS,
+  ) {
+    if (options.destination === 'device') {
+      startDeviceDownload(video, options)
+      return
+    }
+
     setPendingDownloadVideoIds((current) =>
       current.includes(video.id) ? current : [...current, video.id],
     )
 
     try {
-      const response = await enqueueDownload(video)
+      const response = await enqueueDownload(video, options)
 
       startTransition(() => {
         setDownloadJobs((current) => {
@@ -272,10 +310,14 @@ function App() {
         })
         setDownloadsErrorMessage(null)
       })
-      pushToast(`Queued "${video.title}" for download.`)
+      pushToast(
+        `Queued "${video.title}" for ${
+          options.mediaKind === 'video' ? 'video' : 'MP3'
+        } download.`,
+      )
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Could not start the MP3 download.'
+        error instanceof Error ? error.message : 'Could not start the download.'
 
       startTransition(() => {
         setDownloadsErrorMessage(message)
@@ -285,6 +327,29 @@ function App() {
         current.filter((videoId) => videoId !== video.id),
       )
     }
+  }
+
+  function handleConfirmDownloadOptions(
+    video: VideoSearchResult,
+    options: DownloadOptions,
+  ) {
+    setDownloadOptionsVideo(null)
+    void handleDownload(video, options)
+  }
+
+  function handleWatchVideo(video: VideoSearchResult) {
+    // The audio player and the video player would otherwise play over each other.
+    setPlayerSession(null)
+    setWatchTarget({
+      videoId: video.id,
+      title: video.title,
+      channelTitle: video.channel_title || null,
+      sourceUrl: video.video_url,
+    })
+  }
+
+  function handleWatchDownload(job: DownloadJob) {
+    handleWatchVideo(downloadJobToVideoSearchResult(job))
   }
 
   async function handleRemoveDownload(job: DownloadJob, deleteFile: boolean) {
@@ -1160,9 +1225,10 @@ function App() {
                   <VideoCard
                     key={video.id}
                     video={video}
-                    onDownload={handleDownload}
+                    onDownload={setDownloadOptionsVideo}
                     onAddToPlaylists={handleAddToPlaylists}
                     onPlay={handlePlayVideo}
+                    onWatch={handleWatchVideo}
                     playlists={playlists}
                     activePlaylistId={activePlaylist?.id ?? null}
                     isAddingToPlaylist={pendingPlaylistVideoId === video.id}
@@ -1191,6 +1257,7 @@ function App() {
             onRenameJob={handleRenameDownload}
             onAddToPlaylists={handleAddDownloadToPlaylists}
             onPlay={handlePlayDownload}
+            onWatch={handleWatchDownload}
           />
         ) : null}
 
@@ -1240,6 +1307,26 @@ function App() {
           />
         ) : null}
       </main>
+
+      {downloadOptionsVideo ? (
+        <DownloadOptionsDialog
+          video={downloadOptionsVideo}
+          isBusy={pendingDownloadVideoIds.includes(downloadOptionsVideo.id)}
+          onConfirm={handleConfirmDownloadOptions}
+          onCancel={() => setDownloadOptionsVideo(null)}
+        />
+      ) : null}
+
+      {watchTarget ? (
+        <VideoPlayerModal
+          key={watchTarget.videoId}
+          videoId={watchTarget.videoId}
+          title={watchTarget.title}
+          channelTitle={watchTarget.channelTitle}
+          sourceUrl={watchTarget.sourceUrl}
+          onClose={() => setWatchTarget(null)}
+        />
+      ) : null}
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <AudioPlayer

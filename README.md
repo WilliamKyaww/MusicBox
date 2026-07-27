@@ -67,7 +67,36 @@ Open:
 http://localhost:5173
 ```
 
+## Downloading and watching
+
+Every search result has a download button that opens a small options dialog:
+
+- **Format** — MP3 audio, or the MP4 video with sound
+- **Video quality** — best available, or capped at 1080p / 720p / 480p / 360p
+- **Destination** — save to the server library (Saved Songs), or download straight
+  to the device you are browsing from
+- **Section** — the whole video, only the first 5 / 10 / 30 minutes, or a custom
+  start/end range such as `1:30` to `4:00`
+
+Device downloads are built on demand and streamed back as a file attachment, so
+nothing is added to the library. Because the file is prepared server-side first,
+a long section takes a while before the browser starts saving it.
+
+Search results and saved songs also have:
+
+- a thumbnail button that saves the video artwork at the largest size YouTube has
+- a watch button that plays the video inside the app
+
+The in-app player uses a progressive (already merged) YouTube stream, which is
+often only available at 360p. A video you downloaded to the library plays back at
+its downloaded quality instead, and the player can fall back to the embedded
+YouTube player when a direct stream will not play.
+
 ## Notes
 - `backend/.env` is gitignored and intended to stay local only.
-- Downloaded MP3 files under `backend/data/downloads/` are also gitignored.
+- Downloaded MP3 and MP4 files under `backend/data/downloads/` are also gitignored.
+- Device downloads are built in `backend/data/downloads/_direct/` and deleted once
+  the response has been sent; the folder is also cleared on backend startup.
 - Playlists are persisted locally through a lightweight JSON registry.
+- Section downloads and video merging both rely on `ffmpeg`, so `FFMPEG_BINARY`
+  must resolve for those features to work.

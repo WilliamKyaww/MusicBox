@@ -1,8 +1,21 @@
 import { useState } from 'react'
-import { DownloadIcon, PencilIcon, PlayIcon, RepeatIcon, TrashIcon } from './Icons'
+import {
+  DownloadIcon,
+  ImageIcon,
+  PencilIcon,
+  PlayIcon,
+  RepeatIcon,
+  TrashIcon,
+  VideoIcon,
+} from './Icons'
 import { ModalDialog } from './ModalDialog'
 import { PlaylistPicker } from './PlaylistPicker'
-import { getDownloadFileHref, getDownloadThumbnailHref } from '../api/downloads'
+import { formatSectionLabel } from '../downloadSections'
+import {
+  getDownloadFileHref,
+  getDownloadThumbnailHref,
+  getVideoThumbnailHref,
+} from '../api/downloads'
 import type { DownloadJob, DownloadRuntimeStatus, Playlist } from '../types'
 
 type DownloadQueuePanelProps = {
@@ -20,6 +33,7 @@ type DownloadQueuePanelProps = {
   onRenameJob: (job: DownloadJob, title: string) => void
   onAddToPlaylists: (job: DownloadJob, playlistIds: string[]) => void
   onPlay?: (job: DownloadJob) => void
+  onWatch?: (job: DownloadJob) => void
 }
 
 function formatFileSize(fileSizeBytes: number | null) {
@@ -58,6 +72,7 @@ export function DownloadQueuePanel({
   onRenameJob,
   onAddToPlaylists,
   onPlay,
+  onWatch,
 }: DownloadQueuePanelProps) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE)
   const [searchQuery, setSearchQuery] = useState('')
@@ -151,6 +166,14 @@ export function DownloadQueuePanel({
               const thumbnailSrc = job.thumbnail_path
                 ? getDownloadThumbnailHref(job.id)
                 : job.thumbnail_url
+              const thumbnailDownloadHref = job.thumbnail_path
+                ? getDownloadThumbnailHref(job.id)
+                : getVideoThumbnailHref(job.video_id, job.title, job.thumbnail_url)
+              const isVideoJob = job.media_kind === 'video'
+              const sectionLabel = formatSectionLabel(
+                job.section_start_seconds,
+                job.section_end_seconds,
+              )
 
               return (
               <article className="download-job download-job--compact" key={job.id}>
@@ -169,6 +192,18 @@ export function DownloadQueuePanel({
                     <h3>{job.title}</h3>
                     <p className="download-job__channel">
                       {job.channel_title || 'Unknown channel'}
+                    </p>
+                    <p className="download-job__tags">
+                      <span
+                        className={`download-job__tag download-job__tag--${job.media_kind}`}
+                      >
+                        {isVideoJob
+                          ? `MP4${job.video_quality === 'best' ? '' : ` ${job.video_quality}p`}`
+                          : 'MP3'}
+                      </span>
+                      {sectionLabel !== 'Whole video' ? (
+                        <span className="download-job__tag">{sectionLabel}</span>
+                      ) : null}
                     </p>
                   </div>
                   <span className={`download-job__pill download-job__pill--${job.status}`}>
@@ -198,7 +233,25 @@ export function DownloadQueuePanel({
                       {job.file_size_bytes ? formatFileSize(job.file_size_bytes) : 'Pending file'}
                     </span>
                     <div className="download-job__action-group">
-                      {job.status === 'completed' && job.download_path && onPlay ? (
+                      {job.status === 'completed' &&
+                      job.download_path &&
+                      isVideoJob &&
+                      onWatch ? (
+                        <button
+                          type="button"
+                          className="download-job__icon-button"
+                          onClick={() => onWatch(job)}
+                          title="Watch in app"
+                          aria-label="Watch in app"
+                        >
+                          <VideoIcon className="action-icon" />
+                        </button>
+                      ) : null}
+
+                      {job.status === 'completed' &&
+                      job.download_path &&
+                      !isVideoJob &&
+                      onPlay ? (
                         <button
                           type="button"
                           className="download-job__icon-button"
@@ -209,6 +262,16 @@ export function DownloadQueuePanel({
                           <PlayIcon className="action-icon" />
                         </button>
                       ) : null}
+
+                      <a
+                        className="download-job__icon-button"
+                        href={thumbnailDownloadHref}
+                        download
+                        title="Download thumbnail"
+                        aria-label="Download thumbnail"
+                      >
+                        <ImageIcon className="action-icon" />
+                      </a>
 
                       {job.status === 'completed' ? (
                         <PlaylistPicker
@@ -239,8 +302,8 @@ export function DownloadQueuePanel({
                           className="download-job__icon-button"
                           href={getDownloadFileHref(job.id)}
                           download={job.file_name ?? undefined}
-                          title="Save MP3"
-                          aria-label="Save MP3"
+                          title={isVideoJob ? 'Save video file' : 'Save MP3'}
+                          aria-label={isVideoJob ? 'Save video file' : 'Save MP3'}
                         >
                           <DownloadIcon className="action-icon" />
                         </a>
@@ -252,8 +315,10 @@ export function DownloadQueuePanel({
                           className="download-job__icon-button download-job__icon-button--danger"
                           onClick={() => onRemoveJob(job, true)}
                           disabled={pendingRemovalIds.includes(job.id)}
-                          title="Delete saved MP3"
-                          aria-label="Delete saved MP3"
+                          title={isVideoJob ? 'Delete saved video' : 'Delete saved MP3'}
+                          aria-label={
+                            isVideoJob ? 'Delete saved video' : 'Delete saved MP3'
+                          }
                         >
                           <TrashIcon className="action-icon" />
                         </button>

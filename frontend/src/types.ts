@@ -30,6 +30,24 @@ export type DownloadRuntimeStatus = {
   downloads_directory: string
 }
 
+export type MediaKind = 'audio' | 'video'
+
+export type VideoQuality = 'best' | '1080' | '720' | '480' | '360'
+
+export type DownloadDestination = 'library' | 'device'
+
+export type DownloadSection = {
+  startSeconds: number
+  endSeconds: number | null
+}
+
+export type DownloadOptions = {
+  mediaKind: MediaKind
+  videoQuality: VideoQuality
+  destination: DownloadDestination
+  section: DownloadSection
+}
+
 export type DownloadJob = {
   id: string
   video_id: string
@@ -47,6 +65,10 @@ export type DownloadJob = {
   file_size_bytes: number | null
   download_path: string | null
   thumbnail_path: string | null
+  media_kind: MediaKind
+  video_quality: VideoQuality
+  section_start_seconds: number
+  section_end_seconds: number | null
 }
 
 export type DownloadListResponse = {

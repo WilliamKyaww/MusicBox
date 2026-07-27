@@ -1,4 +1,5 @@
-import { DownloadIcon, PlayIcon, YouTubeIcon } from './Icons'
+import { getVideoThumbnailHref } from '../api/downloads'
+import { DownloadIcon, ImageIcon, PlayIcon, VideoIcon, YouTubeIcon } from './Icons'
 import { PlaylistPicker } from './PlaylistPicker'
 import type { DownloadJob, Playlist, VideoSearchResult } from '../types'
 
@@ -14,6 +15,7 @@ type VideoCardProps = {
     sourceUrl: string,
     durationLabel: string | null,
   ) => void
+  onWatch?: (video: VideoSearchResult) => void
   playlists: Playlist[]
   activePlaylistId: string | null
   isAddingToPlaylist: boolean
@@ -28,6 +30,7 @@ export function VideoCard({
   onDownload,
   onAddToPlaylists,
   onPlay,
+  onWatch,
   playlists,
   activePlaylistId,
   isAddingToPlaylist,
@@ -38,8 +41,7 @@ export function VideoCard({
     isSubmittingDownload ||
     latestDownload?.status === 'queued' ||
     latestDownload?.status === 'downloading' ||
-    latestDownload?.status === 'converting' ||
-    latestDownload?.status === 'completed'
+    latestDownload?.status === 'converting'
 
   return (
     <article className="video-card">
@@ -87,6 +89,17 @@ export function VideoCard({
               <PlayIcon className="action-icon" />
             </button>
           ) : null}
+          {onWatch ? (
+            <button
+              className="video-card__icon-button video-card__icon-button--watch"
+              type="button"
+              title="Watch video in app"
+              aria-label="Watch video in app"
+              onClick={() => onWatch(video)}
+            >
+              <VideoIcon className="action-icon" />
+            </button>
+          ) : null}
           <a
             className="video-card__icon-button video-card__icon-button--youtube"
             href={video.video_url}
@@ -100,20 +113,25 @@ export function VideoCard({
         </div>
 
         <div className="video-card__action-cluster video-card__action-cluster--end">
+          <a
+            className="video-card__icon-button"
+            href={getVideoThumbnailHref(video.id, video.title, video.thumbnail_url)}
+            download
+            title="Download thumbnail"
+            aria-label="Download thumbnail"
+          >
+            <ImageIcon className="action-icon" />
+          </a>
           <button
             className={`video-card__icon-button ${latestDownload ? `video-card__icon-button--${latestDownload.status}` : ''}`}
             type="button"
             disabled={isDownloadBusy}
             title={
-              latestDownload?.status === 'completed'
-                ? 'Use the queue panel to save the finished MP3.'
-                : 'Download MP3'
+              isDownloadBusy
+                ? 'A download for this video is already running.'
+                : 'Download audio or video'
             }
-            aria-label={
-              latestDownload?.status === 'completed'
-                ? 'MP3 already completed'
-                : 'Download MP3'
-            }
+            aria-label="Download audio or video"
             onClick={() => onDownload(video)}
           >
             <DownloadIcon className="action-icon" />

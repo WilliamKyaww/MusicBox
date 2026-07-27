@@ -1,6 +1,7 @@
 import asyncio
 import html
 import json
+import math
 import mimetypes
 import re
 import shutil
@@ -15,6 +16,7 @@ from app.models.downloads import (
     DownloadJob,
     DownloadRequest,
     DownloadRuntimeStatus,
+    DownloadSection,
     UpdateDownloadRequest,
 )
 
@@ -22,17 +24,46 @@ import httpx
 
 try:
     import yt_dlp
+    from yt_dlp.utils import download_range_func
 except ImportError:  # pragma: no cover - depends on local environment
     yt_dlp = None
+    download_range_func = None
 
 INVALID_FILENAME_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 MULTISPACE_PATTERN = re.compile(r"\s+")
+FORMAT_FRAGMENT_PATTERN = re.compile(r"\.f\d+\.[^.]+$")
 ACTIVE_JOB_STATUSES = {"queued", "downloading", "converting"}
 DOWNLOAD_REGISTRY_FILENAME = "jobs.json"
+DIRECT_DOWNLOAD_DIRNAME = "_direct"
+MISSING_FILE_ERROR = "The saved media file could not be found on disk."
+# Registries written before video downloads existed use the older MP3-only wording.
+MISSING_FILE_ERRORS = {
+    MISSING_FILE_ERROR,
+    "The saved MP3 file could not be found on disk.",
+}
+MEDIA_EXTENSIONS: dict[str, tuple[str, ...]] = {
+    "audio": ("mp3",),
+    "video": ("mp4", "mkv", "webm"),
+}
+VIDEO_MEDIA_TYPES = {
+    ".mp4": "video/mp4",
+    ".mkv": "video/x-matroska",
+    ".webm": "video/webm",
+}
 
 
 class DownloadRuntimeError(RuntimeError):
     """Raised when the local machine is missing a tool required for downloads."""
+
+
+@dataclass(slots=True)
+class DirectDownload:
+    """A one-off download that is streamed to the caller and then discarded."""
+
+    file_path: Path
+    file_name: str
+    media_type: str
+    cleanup_dir: Path
 
 
 @dataclass(slots=True)
@@ -53,6 +84,10 @@ class _DownloadRecord:
     file_size_bytes: int | None = None
     file_path: Path | None = None
     thumbnail_path: Path | None = None
+    media_kind: str = "audio"
+    video_quality: str = "best"
+    section_start_seconds: int = 0
+    section_end_seconds: int | None = None
 
     def to_public_model(self) -> DownloadJob:
         download_path = None
@@ -79,6 +114,10 @@ class _DownloadRecord:
             file_size_bytes=self.file_size_bytes,
             download_path=download_path,
             thumbnail_path=thumbnail_path,
+            media_kind=self.media_kind,  # type: ignore[arg-type]
+            video_quality=self.video_quality,  # type: ignore[arg-type]
+            section_start_seconds=self.section_start_seconds,
+            section_end_seconds=self.section_end_seconds,
         )
 
 
@@ -101,18 +140,63 @@ def _decode_text(value: str) -> str:
     return html.unescape(value)
 
 
+def _format_clock(total_seconds: int) -> str:
+    hours, remainder = divmod(max(0, total_seconds), 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    if hours > 0:
+        return f"{hours}h{minutes:02d}m{seconds:02d}s"
+    if minutes > 0:
+        return f"{minutes}m{seconds:02d}s"
+
+    return f"{seconds}s"
+
+
+def _section_suffix(start_seconds: int, end_seconds: int | None) -> str:
+    """Filename fragment that keeps section downloads distinguishable on disk."""
+    if start_seconds == 0 and end_seconds is None:
+        return ""
+    if start_seconds == 0:
+        return f" (first {_format_clock(end_seconds or 0)})"
+    if end_seconds is None:
+        return f" (from {_format_clock(start_seconds)})"
+
+    return f" ({_format_clock(start_seconds)}-{_format_clock(end_seconds)})"
+
+
+def _dedup_key(
+    video_id: str,
+    media_kind: str,
+    start_seconds: int,
+    end_seconds: int | None,
+) -> str:
+    """Only identical requests (same media and same section) share a job."""
+    return f"{video_id}:{media_kind}:{start_seconds}:{end_seconds if end_seconds is not None else 'end'}"
+
+
+def media_type_for_file(file_path: Path) -> str:
+    suffix = file_path.suffix.lower()
+    if suffix in VIDEO_MEDIA_TYPES:
+        return VIDEO_MEDIA_TYPES[suffix]
+    if suffix == ".mp3":
+        return "audio/mpeg"
+
+    return mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+
+
 class DownloadManager:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.settings.downloads_dir.mkdir(parents=True, exist_ok=True)
         self._registry_path = self.settings.downloads_dir / DOWNLOAD_REGISTRY_FILENAME
         self._jobs: dict[str, _DownloadRecord] = {}
-        self._active_jobs_by_video_id: dict[str, str] = {}
+        self._active_jobs_by_key: dict[str, str] = {}
         self._lock = threading.RLock()
         self._worker_semaphore = threading.BoundedSemaphore(
             max(1, self.settings.max_concurrent_downloads)
         )
         self._restore_jobs_from_disk()
+        self._purge_direct_download_dir()
 
     def get_runtime_status(self) -> DownloadRuntimeStatus:
         missing: list[str] = []
@@ -163,8 +247,14 @@ class DownloadManager:
                 )
 
             if job.status == "completed" and job.file_path and job.file_path.exists():
+                section_suffix = _section_suffix(
+                    job.section_start_seconds, job.section_end_seconds
+                )
+                base_name = _sanitize_filename(
+                    f"{normalized_title} [{job.video_id}]{section_suffix}"
+                )
                 target_path = job.file_path.with_name(
-                    f"{_sanitize_filename(f'{normalized_title} [{job.video_id}]')}.mp3"
+                    f"{base_name}{job.file_path.suffix}"
                 )
                 if target_path != job.file_path:
                     if target_path.exists():
@@ -175,7 +265,7 @@ class DownloadManager:
                         job.file_path.rename(target_path)
                     except OSError as exc:
                         raise DownloadRuntimeError(
-                            "Could not rename the saved MP3 file on disk."
+                            "Could not rename the saved media file on disk."
                         ) from exc
 
                     job.file_path = target_path
@@ -211,13 +301,23 @@ class DownloadManager:
     def get_ffmpeg_binary(self) -> str | None:
         return self._resolve_ffmpeg_binary()
 
-    def find_completed_job_for_video(self, video_id: str) -> DownloadJob | None:
+    def find_completed_job_for_video(
+        self,
+        video_id: str,
+        *,
+        media_kind: str = "audio",
+    ) -> DownloadJob | None:
+        """Return the newest complete (un-trimmed) local file for a video, if any."""
         with self._lock:
             candidates = sorted(
                 (
                     job
                     for job in self._jobs.values()
-                    if job.video_id == video_id and job.status == "completed"
+                    if job.video_id == video_id
+                    and job.status == "completed"
+                    and job.media_kind == media_kind
+                    and job.section_start_seconds == 0
+                    and job.section_end_seconds is None
                 ),
                 key=lambda item: item.updated_at,
                 reverse=True,
@@ -270,7 +370,13 @@ class DownloadManager:
             if job.status != "failed":
                 raise DownloadRuntimeError("Only failed downloads can be redownloaded.")
 
-            existing_job_id = self._active_jobs_by_video_id.get(job.video_id)
+            job_key = _dedup_key(
+                job.video_id,
+                job.media_kind,
+                job.section_start_seconds,
+                job.section_end_seconds,
+            )
+            existing_job_id = self._active_jobs_by_key.get(job_key)
             if existing_job_id:
                 return self._jobs[existing_job_id].to_public_model(), True
 
@@ -287,42 +393,44 @@ class DownloadManager:
             job.file_path = None
             job.thumbnail_path = None
             job.updated_at = _utc_now()
-            self._active_jobs_by_video_id[job.video_id] = job.id
+            self._active_jobs_by_key[job_key] = job.id
             self._persist_registry_unlocked()
 
         asyncio.create_task(self._run_job(job_id))
         return job.to_public_model(), False
 
     def ensure_download_sync(self, request: DownloadRequest, *, timeout_seconds: int = 900) -> DownloadJob:
-        existing_completed = self.find_completed_job_for_video(request.video_id)
+        existing_completed = self.find_completed_job_for_video(
+            request.video_id, media_kind=request.media_kind
+        )
         if existing_completed is not None:
             return existing_completed
 
+        section = request.section or DownloadSection()
+
         with self._lock:
-            existing_job_id = self._active_jobs_by_video_id.get(request.video_id)
+            existing_job_id = self._active_jobs_by_key.get(
+                _dedup_key(
+                    request.video_id,
+                    request.media_kind,
+                    section.start_seconds,
+                    section.end_seconds,
+                )
+            )
             if existing_job_id:
                 target_job_id = existing_job_id
             else:
-                timestamp = _utc_now()
                 job_id = uuid4().hex
-                source_url = str(
-                    request.source_url or f"https://www.youtube.com/watch?v={request.video_id}"
-                )
-                record = _DownloadRecord(
-                    id=job_id,
-                    video_id=request.video_id,
-                    title=_decode_text(request.title or request.video_id),
-                    channel_title=_decode_text(request.channel_title),
-                    thumbnail_url=str(request.thumbnail_url) if request.thumbnail_url else None,
-                    source_url=source_url,
-                    status="queued",
-                    status_detail="Waiting for an available worker slot.",
-                    progress_percent=0,
-                    created_at=timestamp,
-                    updated_at=timestamp,
-                )
+                record = self._build_record(job_id, request, section)
                 self._jobs[job_id] = record
-                self._active_jobs_by_video_id[request.video_id] = job_id
+                self._active_jobs_by_key[
+                    _dedup_key(
+                        request.video_id,
+                        request.media_kind,
+                        section.start_seconds,
+                        section.end_seconds,
+                    )
+                ] = job_id
                 self._persist_registry_unlocked()
                 target_job_id = job_id
 
@@ -340,34 +448,56 @@ class DownloadManager:
                 + " ".join(runtime.missing_dependencies)
             )
 
+        section = request.section or DownloadSection()
+        job_key = _dedup_key(
+            request.video_id,
+            request.media_kind,
+            section.start_seconds,
+            section.end_seconds,
+        )
+
         with self._lock:
-            existing_job_id = self._active_jobs_by_video_id.get(request.video_id)
+            existing_job_id = self._active_jobs_by_key.get(job_key)
             if existing_job_id:
                 return self._jobs[existing_job_id].to_public_model(), True
 
-            timestamp = _utc_now()
             job_id = uuid4().hex
-            source_url = str(request.source_url or f"https://www.youtube.com/watch?v={request.video_id}")
-
-            record = _DownloadRecord(
-                id=job_id,
-                video_id=request.video_id,
-                title=_decode_text(request.title or request.video_id),
-                channel_title=_decode_text(request.channel_title),
-                thumbnail_url=str(request.thumbnail_url) if request.thumbnail_url else None,
-                source_url=source_url,
-                status="queued",
-                status_detail="Waiting for an available worker slot.",
-                progress_percent=0,
-                created_at=timestamp,
-                updated_at=timestamp,
-            )
+            record = self._build_record(job_id, request, section)
             self._jobs[job_id] = record
-            self._active_jobs_by_video_id[request.video_id] = job_id
+            self._active_jobs_by_key[job_key] = job_id
             self._persist_registry_unlocked()
 
         asyncio.create_task(self._run_job(job_id))
         return record.to_public_model(), False
+
+    def _build_record(
+        self,
+        job_id: str,
+        request: DownloadRequest,
+        section: DownloadSection,
+    ) -> _DownloadRecord:
+        timestamp = _utc_now()
+        source_url = str(
+            request.source_url or f"https://www.youtube.com/watch?v={request.video_id}"
+        )
+
+        return _DownloadRecord(
+            id=job_id,
+            video_id=request.video_id,
+            title=_decode_text(request.title or request.video_id),
+            channel_title=_decode_text(request.channel_title),
+            thumbnail_url=str(request.thumbnail_url) if request.thumbnail_url else None,
+            source_url=source_url,
+            status="queued",
+            status_detail="Waiting for an available worker slot.",
+            progress_percent=0,
+            created_at=timestamp,
+            updated_at=timestamp,
+            media_kind=request.media_kind,
+            video_quality=request.video_quality,
+            section_start_seconds=section.start_seconds,
+            section_end_seconds=section.end_seconds,
+        )
 
     async def _run_job(self, job_id: str) -> None:
         await asyncio.to_thread(self._run_job_sync, job_id)
@@ -382,6 +512,78 @@ class DownloadManager:
             self._release_active_job(job_id)
             self._worker_semaphore.release()
 
+    def _build_ydl_opts(
+        self,
+        *,
+        media_kind: str,
+        video_quality: str,
+        section_start_seconds: int,
+        section_end_seconds: int | None,
+        output_template: str,
+        ffmpeg_binary: str,
+        progress_hooks: list,
+    ) -> dict:
+        """Shared yt-dlp options for queued jobs and direct-to-device downloads."""
+        ydl_opts: dict = {
+            "outtmpl": output_template,
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "ffmpeg_location": ffmpeg_binary,
+            "progress_hooks": progress_hooks,
+        }
+
+        if media_kind == "video":
+            if video_quality == "best":
+                ydl_opts["format"] = "bestvideo*+bestaudio/best"
+            else:
+                height = int(video_quality)
+                ydl_opts["format"] = (
+                    f"bestvideo[height<={height}]+bestaudio/"
+                    f"best[height<={height}]/best"
+                )
+            ydl_opts["merge_output_format"] = "mp4"
+        else:
+            ydl_opts["format"] = "bestaudio/best"
+            ydl_opts["postprocessors"] = [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ]
+
+        if section_start_seconds > 0 or section_end_seconds is not None:
+            if download_range_func is None:  # pragma: no cover - defensive guard
+                raise DownloadRuntimeError(
+                    "This yt-dlp build cannot download partial sections. Upgrade yt-dlp."
+                )
+
+            ydl_opts["download_ranges"] = download_range_func(
+                None,
+                [
+                    (
+                        float(section_start_seconds),
+                        float(section_end_seconds)
+                        if section_end_seconds is not None
+                        else math.inf,
+                    )
+                ],
+            )
+            ydl_opts["force_keyframes_at_cuts"] = True
+
+        if self.settings.youtube_cookies_file:
+            ydl_opts["cookiefile"] = self.settings.youtube_cookies_file
+
+        if self.settings.po_token_server_url:
+            ydl_opts["extractor_args"] = {
+                "youtubepot-bgutilhttp": {
+                    "base_url": [self.settings.po_token_server_url],
+                },
+            }
+
+        return ydl_opts
+
     def _download_with_yt_dlp(self, job_id: str) -> None:
         if yt_dlp is None:  # pragma: no cover - defensive guard
             raise DownloadRuntimeError("yt-dlp is not installed.")
@@ -390,8 +592,17 @@ class DownloadManager:
 
         with self._lock:
             job = self._jobs[job_id]
-            safe_base_name = _sanitize_filename(f"{job.title} [{job.video_id}]")
+            media_kind = job.media_kind
+            video_quality = job.video_quality
+            section_start_seconds = job.section_start_seconds
+            section_end_seconds = job.section_end_seconds
+            section_suffix = _section_suffix(section_start_seconds, section_end_seconds)
+            safe_base_name = _sanitize_filename(
+                f"{job.title} [{job.video_id}]{section_suffix}"
+            )
             job_dir = settings.downloads_dir / job_id
+
+        media_label = "video" if media_kind == "video" else "audio"
 
         job_dir.mkdir(parents=True, exist_ok=True)
         thumbnail_path = self._download_thumbnail(job_id, job_dir)
@@ -419,9 +630,9 @@ class DownloadManager:
                     status="downloading",
                     progress_percent=max(1, min(percent, 90)),
                     status_detail=(
-                        f"Downloading audio stream ({str(detail).strip()})"
+                        f"Downloading {media_label} stream ({str(detail).strip()})"
                         if detail
-                        else "Downloading audio stream"
+                        else f"Downloading {media_label} stream"
                     ),
                 )
             elif status == "finished":
@@ -429,14 +640,18 @@ class DownloadManager:
                     job_id,
                     status="converting",
                     progress_percent=92,
-                    status_detail="Audio download complete. Converting to MP3...",
+                    status_detail=(
+                        "Video download complete. Merging into MP4..."
+                        if media_kind == "video"
+                        else "Audio download complete. Converting to MP3..."
+                    ),
                 )
 
         self._update_job(
             job_id,
             status="downloading",
             progress_percent=2,
-            status_detail="Preparing YouTube audio download...",
+            status_detail=f"Preparing YouTube {media_label} download...",
         )
 
         ffmpeg_binary = self._resolve_ffmpeg_binary()
@@ -445,48 +660,35 @@ class DownloadManager:
                 "ffmpeg could not be found. Install it or set FFMPEG_BINARY in backend/.env."
             )
 
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": output_template,
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-            "ffmpeg_location": ffmpeg_binary,
-            "progress_hooks": [progress_hook],
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }
-            ],
-        }
-
-        if self.settings.youtube_cookies_file:
-            ydl_opts["cookiefile"] = self.settings.youtube_cookies_file
-
-        if self.settings.po_token_server_url:
-            ydl_opts["extractor_args"] = {
-                "youtubepot-bgutilhttp": {
-                    "base_url": [self.settings.po_token_server_url],
-                },
-            }
+        ydl_opts = self._build_ydl_opts(
+            media_kind=media_kind,
+            video_quality=video_quality,
+            section_start_seconds=section_start_seconds,
+            section_end_seconds=section_end_seconds,
+            output_template=output_template,
+            ffmpeg_binary=ffmpeg_binary,
+            progress_hooks=[progress_hook],
+        )
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([self._jobs[job_id].source_url])
 
-        final_file = self._locate_final_file(job_dir)
+        final_file = self._locate_final_file(job_dir, media_kind)
         if final_file is None:
             raise DownloadRuntimeError(
-                "The download completed but no MP3 file was produced. "
-                "Make sure ffmpeg is installed and available on PATH."
+                f"The download completed but no {'MP4' if media_kind == 'video' else 'MP3'} "
+                "file was produced. Make sure ffmpeg is installed and available on PATH."
             )
 
         self._update_job(
             job_id,
             status="completed",
             progress_percent=100,
-            status_detail="MP3 is ready to save.",
+            status_detail=(
+                "Video is ready to save."
+                if media_kind == "video"
+                else "MP3 is ready to save."
+            ),
             file_name=final_file.name,
             file_size_bytes=final_file.stat().st_size,
             file_path=final_file,
@@ -494,15 +696,97 @@ class DownloadManager:
             error_message=None,
         )
 
+    def prepare_direct_download(self, request: DownloadRequest) -> DirectDownload:
+        """Download straight to a scratch folder for immediate delivery to the device.
+
+        Nothing is added to the saved-songs registry; the caller is responsible for
+        removing `cleanup_dir` once the response has been sent.
+        """
+        runtime = self.get_runtime_status()
+        if not runtime.available:
+            raise DownloadRuntimeError(
+                "Download prerequisites are missing. "
+                + " ".join(runtime.missing_dependencies)
+            )
+
+        ffmpeg_binary = self._resolve_ffmpeg_binary()
+        if ffmpeg_binary is None:  # pragma: no cover - covered by runtime status
+            raise DownloadRuntimeError(
+                "ffmpeg could not be found. Install it or set FFMPEG_BINARY in backend/.env."
+            )
+
+        section = request.section or DownloadSection()
+        section_suffix = _section_suffix(section.start_seconds, section.end_seconds)
+        title = _decode_text(request.title or request.video_id)
+        safe_base_name = _sanitize_filename(f"{title}{section_suffix}")
+        scratch_dir = (
+            self.settings.downloads_dir / DIRECT_DOWNLOAD_DIRNAME / uuid4().hex
+        )
+        scratch_dir.mkdir(parents=True, exist_ok=True)
+
+        ydl_opts = self._build_ydl_opts(
+            media_kind=request.media_kind,
+            video_quality=request.video_quality,
+            section_start_seconds=section.start_seconds,
+            section_end_seconds=section.end_seconds,
+            output_template=str(scratch_dir / f"{safe_base_name}.%(ext)s"),
+            ffmpeg_binary=ffmpeg_binary,
+            progress_hooks=[],
+        )
+        source_url = str(
+            request.source_url or f"https://www.youtube.com/watch?v={request.video_id}"
+        )
+
+        self._worker_semaphore.acquire()
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([source_url])
+
+            final_file = self._locate_final_file(scratch_dir, request.media_kind)
+        except Exception:
+            shutil.rmtree(scratch_dir, ignore_errors=True)
+            raise
+        finally:
+            self._worker_semaphore.release()
+
+        if final_file is None:
+            shutil.rmtree(scratch_dir, ignore_errors=True)
+            raise DownloadRuntimeError(
+                "The download finished but no media file was produced. "
+                "Make sure ffmpeg is installed and available on PATH."
+            )
+
+        return DirectDownload(
+            file_path=final_file,
+            file_name=final_file.name,
+            media_type=media_type_for_file(final_file),
+            cleanup_dir=scratch_dir,
+        )
+
+    @staticmethod
+    def cleanup_direct_download(cleanup_dir: Path) -> None:
+        shutil.rmtree(cleanup_dir, ignore_errors=True)
+
+    def _purge_direct_download_dir(self) -> None:
+        """Drop scratch files left behind by an interrupted direct download."""
+        direct_dir = self.settings.downloads_dir / DIRECT_DOWNLOAD_DIRNAME
+        if direct_dir.exists():
+            shutil.rmtree(direct_dir, ignore_errors=True)
+
     def _release_active_job(self, job_id: str) -> None:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return
 
-            current = self._active_jobs_by_video_id.get(job.video_id)
-            if current == job_id:
-                self._active_jobs_by_video_id.pop(job.video_id, None)
+            job_key = _dedup_key(
+                job.video_id,
+                job.media_kind,
+                job.section_start_seconds,
+                job.section_end_seconds,
+            )
+            if self._active_jobs_by_key.get(job_key) == job_id:
+                self._active_jobs_by_key.pop(job_key, None)
 
     def _mark_failed(self, job_id: str, message: str) -> None:
         self._update_job(
@@ -540,12 +824,28 @@ class DownloadManager:
         raise DownloadRuntimeError("Timed out waiting for the required MP3 download.")
 
     @staticmethod
-    def _locate_final_file(job_dir: Path) -> Path | None:
-        matches = sorted(job_dir.glob("*.mp3"))
-        if not matches:
+    def _locate_final_file(job_dir: Path, media_kind: str = "audio") -> Path | None:
+        extensions = MEDIA_EXTENSIONS.get(media_kind, MEDIA_EXTENSIONS["audio"])
+        priority = {extension: index for index, extension in enumerate(extensions)}
+        candidates = [
+            match
+            for extension in extensions
+            for match in job_dir.glob(f"*.{extension}")
+            # Skip the per-format parts yt-dlp leaves behind when a merge is aborted.
+            if match.is_file() and not FORMAT_FRAGMENT_PATTERN.search(match.name)
+        ]
+
+        if not candidates:
             return None
 
-        return matches[0]
+        # Prefer the preferred container, then the largest file (the merged output).
+        candidates.sort(
+            key=lambda path: (
+                priority.get(path.suffix.lstrip(".").lower(), len(priority)),
+                -path.stat().st_size,
+            )
+        )
+        return candidates[0]
 
     @staticmethod
     def _locate_thumbnail_file(job_dir: Path) -> Path | None:
@@ -644,8 +944,8 @@ class DownloadManager:
             if job.status == "completed" and job.file_path and not job.file_path.exists():
                 if not self._repair_job_file_from_folder(job):
                     job.status = "failed"
-                    job.status_detail = "Recorded MP3 file is missing."
-                    job.error_message = "The saved MP3 file could not be found on disk."
+                    job.status_detail = "Recorded media file is missing."
+                    job.error_message = MISSING_FILE_ERROR
                     job.file_name = None
                     job.file_size_bytes = None
                     job.file_path = None
@@ -656,7 +956,7 @@ class DownloadManager:
             if (
                 job.status == "failed"
                 and not job.file_path
-                and job.error_message == "The saved MP3 file could not be found on disk."
+                and job.error_message in MISSING_FILE_ERRORS
             ):
                 self._repair_job_file_from_folder(job)
 
@@ -667,12 +967,16 @@ class DownloadManager:
 
     def _repair_job_file_from_folder(self, job: _DownloadRecord) -> bool:
         job_dir = self.settings.downloads_dir / job.id
-        final_file = self._locate_final_file(job_dir)
+        final_file = self._locate_final_file(job_dir, job.media_kind)
         if final_file is None:
             return False
 
         job.status = "completed"
-        job.status_detail = "MP3 is ready to save."
+        job.status_detail = (
+            "Video is ready to save."
+            if job.media_kind == "video"
+            else "MP3 is ready to save."
+        )
         job.error_message = None
         job.progress_percent = 100
         job.file_path = final_file
@@ -708,6 +1012,10 @@ class DownloadManager:
             "file_size_bytes": job.file_size_bytes,
             "file_path": str(job.file_path) if job.file_path else None,
             "thumbnail_path": str(job.thumbnail_path) if job.thumbnail_path else None,
+            "media_kind": job.media_kind,
+            "video_quality": job.video_quality,
+            "section_start_seconds": job.section_start_seconds,
+            "section_end_seconds": job.section_end_seconds,
         }
 
     @staticmethod
@@ -734,6 +1042,14 @@ class DownloadManager:
             ),
             file_path=Path(str(file_path)) if file_path else None,
             thumbnail_path=Path(str(thumbnail_path)) if thumbnail_path else None,
+            media_kind=str(payload.get("media_kind") or "audio"),
+            video_quality=str(payload.get("video_quality") or "best"),
+            section_start_seconds=int(payload.get("section_start_seconds") or 0),
+            section_end_seconds=(
+                int(payload["section_end_seconds"])
+                if payload.get("section_end_seconds") is not None
+                else None
+            ),
         )
 
 
