@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ModalDialog } from './ModalDialog'
 import { formatSectionLabel, parseTimecode } from '../downloadSections'
+import { formatClock } from '../format'
 import type {
   DownloadDestination,
   DownloadOptions,
@@ -12,6 +13,7 @@ import type {
 
 type DownloadOptionsDialogProps = {
   video: VideoSearchResult
+  initialSection?: DownloadSection
   isBusy: boolean
   onConfirm: (video: VideoSearchResult, options: DownloadOptions) => void
   onCancel: () => void
@@ -26,6 +28,8 @@ const MEDIA_KINDS: { id: MediaKind; label: string; hint: string }[] = [
 
 const VIDEO_QUALITIES: { id: VideoQuality; label: string }[] = [
   { id: 'best', label: 'Best' },
+  { id: '2160', label: '4K' },
+  { id: '1440', label: '1440p' },
   { id: '1080', label: '1080p' },
   { id: '720', label: '720p' },
   { id: '480', label: '480p' },
@@ -53,19 +57,40 @@ const SECTION_PRESETS: { id: SectionPresetId; label: string }[] = [
   { id: 'custom', label: 'Custom range' },
 ]
 
+function videoDurationSeconds(video: VideoSearchResult) {
+  if (video.duration_seconds) return video.duration_seconds
+  return /^\d+(:\d{2}){1,2}$/.test(video.duration_label)
+    ? parseTimecode(video.duration_label)
+    : null
+}
+
 export function DownloadOptionsDialog({
   video,
+  initialSection,
   isBusy,
   onConfirm,
   onCancel,
 }: DownloadOptionsDialogProps) {
-  const [mediaKind, setMediaKind] = useState<MediaKind>('audio')
+  const hasInitialSection = Boolean(
+    initialSection && (initialSection.startSeconds > 0 || initialSection.endSeconds !== null),
+  )
+  // A section picked on the watch page usually means a video clip.
+  const [mediaKind, setMediaKind] = useState<MediaKind>(hasInitialSection ? 'video' : 'audio')
   const [videoQuality, setVideoQuality] = useState<VideoQuality>('best')
   const [destination, setDestination] = useState<DownloadDestination>('library')
-  const [sectionPreset, setSectionPreset] = useState<SectionPresetId>('full')
-  const [customStart, setCustomStart] = useState('0:00')
-  const [customEnd, setCustomEnd] = useState('')
+  const [sectionPreset, setSectionPreset] = useState<SectionPresetId>(
+    hasInitialSection ? 'custom' : 'full',
+  )
+  const [customStart, setCustomStart] = useState(
+    formatClock(hasInitialSection ? initialSection?.startSeconds ?? 0 : 0),
+  )
+  const [customEnd, setCustomEnd] = useState(
+    hasInitialSection && initialSection?.endSeconds != null
+      ? formatClock(initialSection.endSeconds)
+      : '',
+  )
   const [validationMessage, setValidationMessage] = useState<string | null>(null)
+  const durationSeconds = videoDurationSeconds(video)
 
   type ResolvedSection =
     | { ok: true; section: DownloadSection }
@@ -236,6 +261,19 @@ export function DownloadOptionsDialog({
             </div>
           ) : null}
 
+          {sectionPreset === 'custom' && durationSeconds ? (
+            <RangeSlider
+              duration={durationSeconds}
+              start={parseTimecode(customStart) ?? 0}
+              end={customEnd.trim() ? parseTimecode(customEnd) ?? durationSeconds : durationSeconds}
+              onChange={(start, end) => {
+                setCustomStart(formatClock(start))
+                setCustomEnd(end >= durationSeconds ? '' : formatClock(end))
+                setValidationMessage(null)
+              }}
+            />
+          ) : null}
+
           {resolved.ok ? (
             <p className="download-options__summary">
               Downloading:{' '}
@@ -262,5 +300,58 @@ export function DownloadOptionsDialog({
         ) : null}
       </div>
     </ModalDialog>
+  )
+}
+
+type RangeSliderProps = {
+  duration: number
+  start: number
+  end: number
+  onChange: (start: number, end: number) => void
+}
+
+/** Two overlapping range inputs acting as one slider with a start and an end handle. */
+function RangeSlider({ duration, start, end, onChange }: RangeSliderProps) {
+  const clampedStart = Math.min(Math.max(0, start), duration)
+  const clampedEnd = Math.min(Math.max(clampedStart, end), duration)
+
+  return (
+    <div className="range-slider">
+      <div className="range-slider__track">
+        <span
+          className="range-slider__fill"
+          style={{
+            left: `${(clampedStart / duration) * 100}%`,
+            width: `${((clampedEnd - clampedStart) / duration) * 100}%`,
+          }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={duration}
+          step={1}
+          value={clampedStart}
+          aria-label="Section start"
+          onChange={(event) =>
+            onChange(Math.min(Number(event.target.value), clampedEnd - 1), clampedEnd)
+          }
+        />
+        <input
+          type="range"
+          min={0}
+          max={duration}
+          step={1}
+          value={clampedEnd}
+          aria-label="Section end"
+          onChange={(event) =>
+            onChange(clampedStart, Math.max(Number(event.target.value), clampedStart + 1))
+          }
+        />
+      </div>
+      <div className="range-slider__labels">
+        <span>0:00</span>
+        <span>{formatClock(duration)}</span>
+      </div>
+    </div>
   )
 }

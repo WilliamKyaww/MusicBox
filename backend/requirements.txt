@@ -6,3 +6,4 @@ yt-dlp
 bgutil-ytdlp-pot-provider
 pypresence
 pillow
+truststore

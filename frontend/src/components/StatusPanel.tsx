@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react'
+
 type StatusPanelProps = {
   title: string
-  body: string
+  body: ReactNode
   tone?: 'neutral' | 'error'
 }
 

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 DownloadStatus = Literal["queued", "downloading", "converting", "completed", "failed"]
 MediaKind = Literal["audio", "video"]
-VideoQuality = Literal["best", "1080", "720", "480", "360"]
+VideoQuality = Literal["best", "2160", "1440", "1080", "720", "480", "360"]
 
 
 class DownloadSection(BaseModel):

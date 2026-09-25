@@ -1,5 +1,12 @@
-import { startTransition, useEffect, useEffectEvent, useState } from 'react'
-import { createPortal } from 'react-dom'
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import {
   DEFAULT_DOWNLOAD_OPTIONS,
   enqueueDownload,
@@ -27,26 +34,34 @@ import {
   renamePlaylist,
   reorderPlaylistItems,
 } from './api/playlists'
-import { searchVideos } from './api/search'
 import { getStreamUrl } from './api/streaming'
 import { createYouTubePlaylistExport } from './api/youtubePlaylists'
 import { AudioPlayer } from './components/AudioPlayer'
 import { DownloadOptionsDialog } from './components/DownloadOptionsDialog'
 import { DownloadQueuePanel } from './components/DownloadQueuePanel'
-import { VideoPlayerModal } from './components/VideoPlayerModal'
-import { VideoIcon, ListIcon, SunIcon, MoonIcon, MusicNoteIcon } from './components/Icons'
 import { PlaylistExportPanel } from './components/PlaylistExportPanel'
 import { PlaylistPanel } from './components/PlaylistPanel'
-import { SearchBar } from './components/SearchBar'
-import { StatusPanel } from './components/StatusPanel'
+import { SaveToPlaylistDialog } from './components/SaveToPlaylistDialog'
 import { ToastViewport } from './components/ToastViewport'
-import { VideoCard } from './components/VideoCard'
 import { YouTubePlaylistDownloadPanel } from './components/YouTubePlaylistDownloadPanel'
+import { Sidebar, type SidebarMode } from './layout/Sidebar'
+import { TopBar } from './layout/TopBar'
+import { ChannelPage } from './pages/ChannelPage'
+import { HistoryPage } from './pages/HistoryPage'
+import { HomePage } from './pages/HomePage'
+import { PlaylistPage } from './pages/PlaylistPage'
+import { SearchPage } from './pages/SearchPage'
+import { SubscriptionsPage } from './pages/SubscriptionsPage'
+import { WatchPage } from './pages/WatchPage'
+import { navigate, parseRoute, paths, useHash } from './router'
+import { useScrollRestoration } from './scrollRestoration'
+import { VideoActionsContext, type VideoActions, type WatchQueue } from './videoActions'
 import type {
   DownloadJob,
   DiscordPresenceStatus,
   DownloadOptions,
   DownloadRuntimeStatus,
+  DownloadSection,
   Playlist,
   PlaylistExportFormat,
   PlaylistExportJob,
@@ -54,14 +69,8 @@ import type {
   VideoSearchResult,
 } from './types'
 import './App.css'
+import './youtube.css'
 
-type PageId = 'video' | 'songs' | 'playlists' | 'playlist'
-type WatchTarget = {
-  videoId: string
-  title: string
-  channelTitle: string | null
-  sourceUrl: string | null
-}
 type ToastMessage = { id: number; message: string }
 type LoopMode = 'off' | 'once' | 'all'
 type PlayerTrack = {
@@ -79,6 +88,13 @@ type PlayerSession = {
   index: number
   shuffle: boolean
 }
+type DownloadTarget = {
+  video: VideoSearchResult
+  section?: DownloadSection
+}
+
+const SIDEBAR_FULL_QUERY = '(min-width: 1312px)'
+const SIDEBAR_MINI_QUERY = '(min-width: 792px)'
 
 function getInitialTheme(): 'light' | 'dark' {
   try {
@@ -87,22 +103,33 @@ function getInitialTheme(): 'light' | 'dark' {
   } catch {
     return 'light'
   }
-  return 'light'
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function useMediaQuery(query: string) {
+  return useSyncExternalStore(
+    (callback) => {
+      const list = window.matchMedia(query)
+      list.addEventListener('change', callback)
+      return () => list.removeEventListener('change', callback)
+    },
+    () => window.matchMedia(query).matches,
+  )
 }
 
 function App() {
-  const [activePage, setActivePage] = useState<PageId>('video')
+  const hash = useHash()
+  const route = useMemo(() => parseRoute(hash), [hash])
+  useScrollRestoration(hash)
+
+  const isWideScreen = useMediaQuery(SIDEBAR_FULL_QUERY)
+  const isMediumScreen = useMediaQuery(SIDEBAR_MINI_QUERY)
+  const [sidebarExpanded, setSidebarExpanded] = useState(true)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
   const [playerSession, setPlayerSession] = useState<PlayerSession | null>(null)
   const [loopMode, setLoopMode] = useState<LoopMode>('off')
   const [toasts, setToasts] = useState<ToastMessage[]>([])
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<VideoSearchResult[]>([])
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
-    'idle',
-  )
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [activeQuery, setActiveQuery] = useState('')
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([])
   const [downloadRuntime, setDownloadRuntime] = useState<DownloadRuntimeStatus | null>(
     null,
@@ -132,17 +159,17 @@ function App() {
     null,
   )
   const [pendingExportRemovalIds, setPendingExportRemovalIds] = useState<string[]>([])
-  const [downloadOptionsVideo, setDownloadOptionsVideo] =
-    useState<VideoSearchResult | null>(null)
-  const [watchTarget, setWatchTarget] = useState<WatchTarget | null>(null)
+  const [downloadTarget, setDownloadTarget] = useState<DownloadTarget | null>(null)
+  const [saveTarget, setSaveTarget] = useState<VideoSearchResult | null>(null)
+  const [watchQueue, setWatchQueue] = useState<WatchQueue | null>(null)
 
-  function pushToast(message: string) {
+  const pushToast = useCallback((message: string) => {
     const id = Date.now() + Math.random()
     setToasts((current) => [...current, { id, message }].slice(-3))
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id))
     }, 3600)
-  }
+  }, [])
 
   function dismissToast(id: number) {
     setToasts((current) => current.filter((toast) => toast.id !== id))
@@ -213,39 +240,6 @@ function App() {
     }
     return shuffled
   }
-
-  const runSearch = useEffectEvent(async (nextQuery: string, signal: AbortSignal) => {
-    setStatus('loading')
-    setErrorMessage(null)
-
-    try {
-      const response = await searchVideos(nextQuery, signal)
-
-      if (signal.aborted) {
-        return
-      }
-
-      startTransition(() => {
-        setResults(response.items)
-        setActiveQuery(response.query)
-        setStatus('success')
-      })
-    } catch (error) {
-      if (signal.aborted) {
-        return
-      }
-
-      const message =
-        error instanceof Error ? error.message : 'Search failed. Please try again.'
-
-      startTransition(() => {
-        setResults([])
-        setActiveQuery(nextQuery)
-        setErrorMessage(message)
-        setStatus('error')
-      })
-    }
-  })
 
   const loadDownloads = useEffectEvent(async (signal?: AbortSignal) => {
     try {
@@ -322,6 +316,7 @@ function App() {
       startTransition(() => {
         setDownloadsErrorMessage(message)
       })
+      pushToast(message)
     } finally {
       setPendingDownloadVideoIds((current) =>
         current.filter((videoId) => videoId !== video.id),
@@ -333,23 +328,12 @@ function App() {
     video: VideoSearchResult,
     options: DownloadOptions,
   ) {
-    setDownloadOptionsVideo(null)
+    setDownloadTarget(null)
     void handleDownload(video, options)
   }
 
-  function handleWatchVideo(video: VideoSearchResult) {
-    // The audio player and the video player would otherwise play over each other.
-    setPlayerSession(null)
-    setWatchTarget({
-      videoId: video.id,
-      title: video.title,
-      channelTitle: video.channel_title || null,
-      sourceUrl: video.video_url,
-    })
-  }
-
   function handleWatchDownload(job: DownloadJob) {
-    handleWatchVideo(downloadJobToVideoSearchResult(job))
+    navigate(paths.watch(job.video_id))
   }
 
   async function handleRemoveDownload(job: DownloadJob, deleteFile: boolean) {
@@ -525,6 +509,7 @@ function App() {
         setPlaylistsErrorMessage(null)
       })
       pushToast(`Created playlist "${playlist.name}".`)
+      return playlist
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Could not create the playlist.'
@@ -532,6 +517,8 @@ function App() {
       startTransition(() => {
         setPlaylistsErrorMessage(message)
       })
+      pushToast(message)
+      return null
     } finally {
       setIsCreatingPlaylist(false)
     }
@@ -600,9 +587,6 @@ function App() {
 
       setPendingPlaylistVideoId(video.id)
       setIsMutatingPlaylist(true)
-      const selectedPlaylistNames = playlists
-        .filter((playlist) => playlistIds.includes(playlist.id))
-        .map((playlist) => playlist.name)
       try {
         const results = await Promise.allSettled(
           playlistIds.map((playlistId) => addVideoToPlaylist(playlistId, video)),
@@ -619,18 +603,21 @@ function App() {
           })
         })
 
+        const selectedPlaylistNames = refreshed.items
+          .filter((playlist) => playlistIds.includes(playlist.id))
+          .map((playlist) => playlist.name)
         const failed = results.filter((result) => result.status === 'rejected')
         if (failed.length > 0) {
           const reason =
             failed[0].status === 'rejected' && failed[0].reason instanceof Error
               ? failed[0].reason.message
               : 'One or more playlist updates failed.'
+          const message = `Added to ${results.length - failed.length} playlist(s). ${reason}`
 
           startTransition(() => {
-            setPlaylistsErrorMessage(
-              `Added to ${results.length - failed.length} playlist(s). ${reason}`,
-            )
+            setPlaylistsErrorMessage(message)
           })
+          pushToast(message)
         } else {
           startTransition(() => {
             setPlaylistsErrorMessage(null)
@@ -650,10 +637,27 @@ function App() {
         startTransition(() => {
           setPlaylistsErrorMessage(message)
         })
+        pushToast(message)
       } finally {
         setPendingPlaylistVideoId(null)
         setIsMutatingPlaylist(false)
       }
+  }
+
+  async function handleSaveToPlaylists(
+    video: VideoSearchResult,
+    playlistIds: string[],
+    newPlaylistName: string,
+  ) {
+    let targetIds = playlistIds
+    if (newPlaylistName) {
+      const created = await handleCreatePlaylist(newPlaylistName)
+      if (!created) return
+      targetIds = [...playlistIds, created.id]
+    }
+
+    setSaveTarget(null)
+    await handleAddToPlaylists(video, targetIds)
   }
 
   async function handleRemovePlaylistItem(playlistId: string, itemId: string) {
@@ -762,7 +766,11 @@ function App() {
           setExportJobs((current) => [exportJob, ...current.filter((job) => job.id !== exportJob.id)])
           setExportsErrorMessage(null)
         })
-        pushToast(`Started YouTube playlist ${exportFormat === 'zip' ? 'ZIP' : 'combined MP3'} export.`)
+        pushToast(
+          `Started YouTube playlist ${
+            exportFormat === 'zip' ? 'ZIP' : 'combined MP3'
+          } export. Track it under Playlist download.`,
+        )
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Could not start YouTube playlist export.'
@@ -770,6 +778,7 @@ function App() {
         startTransition(() => {
           setExportsErrorMessage(message)
         })
+        pushToast(message)
       } finally {
         setIsCreatingYouTubePlaylistExport(false)
       }
@@ -800,39 +809,6 @@ function App() {
         )
       }
   }
-
-  function handleQueryChange(nextQuery: string) {
-    setQuery(nextQuery)
-
-    if (nextQuery.trim().length < 2) {
-      setResults([])
-      setActiveQuery('')
-      setErrorMessage(null)
-      setStatus('idle')
-    }
-  }
-
-  useEffect(() => {
-    const trimmedQuery = query.trim()
-
-    if (!trimmedQuery) {
-      return
-    }
-
-    if (trimmedQuery.length < 2) {
-      return
-    }
-
-    const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => {
-      void runSearch(trimmedQuery, controller.signal)
-    }, 350)
-
-    return () => {
-      controller.abort()
-      window.clearTimeout(timeoutId)
-    }
-  }, [query])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -904,6 +880,19 @@ function App() {
       window.clearInterval(intervalId)
     }
   }, [hasActiveExports])
+
+  // Opening a video stops the audio bar, otherwise both would play at once, and
+  // any navigation closes the guide drawer.
+  useEffect(() => {
+    function handleHashChange() {
+      setDrawerOpen(false)
+      if (parseRoute(window.location.hash).name === 'watch') {
+        setPlayerSession(null)
+      }
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
 
   function getLatestDownloadForVideo(videoId: string) {
     return downloadJobs.find((job) => job.video_id === videoId) ?? null
@@ -1113,156 +1102,92 @@ function App() {
     await handleAddToPlaylists(toVideoSearchResult(currentTrack), playlistIds)
   }
 
-  const navigation = (
-    <nav className="app-nav">
-      <div className="app-nav__tabs">
-        <button
-          type="button"
-          className={`app-nav__tab ${activePage === 'video' ? 'app-nav__tab--active' : ''}`}
-          onClick={() => setActivePage('video')}
-        >
-          <VideoIcon className="app-nav__tab-icon" />
-          YouTube Video
-        </button>
-        <button
-          type="button"
-          className={`app-nav__tab ${activePage === 'songs' ? 'app-nav__tab--active' : ''}`}
-          onClick={() => setActivePage('songs')}
-        >
-          <MusicNoteIcon className="app-nav__tab-icon" />
-          Saved Songs
-        </button>
-        <button
-          type="button"
-          className={`app-nav__tab ${activePage === 'playlists' ? 'app-nav__tab--active' : ''}`}
-          onClick={() => setActivePage('playlists')}
-        >
-          <ListIcon className="app-nav__tab-icon" />
-          Saved Playlists
-        </button>
-        <button
-          type="button"
-          className={`app-nav__tab ${activePage === 'playlist' ? 'app-nav__tab--active' : ''}`}
-          onClick={() => setActivePage('playlist')}
-        >
-          <ListIcon className="app-nav__tab-icon" />
-          YouTube Playlist
-        </button>
-      </div>
-      <div className="app-nav__actions">
-        {hasActiveDownloads || hasActiveExports ? (
-          <span className="app-nav__status">Processing…</span>
-        ) : null}
-        <button
-          type="button"
-          className="app-nav__theme-toggle"
-          onClick={toggleTheme}
-          title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-          aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-        >
-          {theme === 'light' ? <MoonIcon className="app-nav__theme-icon" /> : <SunIcon className="app-nav__theme-icon" />}
-        </button>
-      </div>
-    </nav>
-  )
+  const videoActions: VideoActions = {
+    openDownload: (video, section) => setDownloadTarget({ video, section }),
+    openSaveToPlaylist: setSaveTarget,
+    playAudio: (video) =>
+      handlePlayVideo(
+        video.id,
+        video.title,
+        video.thumbnail_url,
+        video.channel_title,
+        video.video_url,
+        video.duration_label,
+      ),
+    setWatchQueue,
+    pushToast,
+    getLatestDownload: getLatestDownloadForVideo,
+    exportYouTubePlaylist: (playlistUrl, format) =>
+      void handleCreateYouTubePlaylistExport(playlistUrl, format),
+    isExportingYouTubePlaylist: isCreatingYouTubePlaylistExport,
+  }
 
-  return (
-    <>
-      {createPortal(navigation, document.body)}
-      <div className="app-shell">
+  // YouTube shows the full guide on wide screens, icons on medium ones and a drawer
+  // otherwise; the watch page always uses the drawer to give the player room.
+  const isWatchPage = route.name === 'watch'
+  let sidebarMode: SidebarMode = 'hidden'
+  if (!isWatchPage) {
+    if (isWideScreen) sidebarMode = sidebarExpanded ? 'full' : 'mini'
+    else if (isMediumScreen) sidebarMode = 'mini'
+  }
 
-      <main className="workspace">
-        {activePage === 'video' ? (
-          <>
-            <SearchBar
-              query={query}
-              onQueryChange={handleQueryChange}
-              isLoading={status === 'loading'}
-            />
+  function handleToggleSidebar() {
+    if (!isWatchPage && isWideScreen) {
+      setSidebarExpanded((expanded) => !expanded)
+    } else {
+      setDrawerOpen((open) => !open)
+    }
+  }
 
-            {status === 'success' && activeQuery ? (
-              <p className="results-count" aria-live="polite">
-                {results.length} result{results.length === 1 ? '' : 's'} for "{activeQuery}"
-              </p>
-            ) : null}
-
-            {status === 'error' && errorMessage ? (
-              <StatusPanel
-                tone="error"
-                title="Search could not complete"
-                body={errorMessage}
-              />
-            ) : null}
-
-
-
-            {status === 'success' && results.length === 0 ? (
-              <StatusPanel
-                title="No results"
-                body="Try a different search."
-              />
-            ) : null}
-
-            {status === 'loading' ? (
-              <section className="results-grid" aria-label="Loading search results">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <article className="video-card video-card--skeleton" key={index}>
-                    <div className="video-card__thumbnail-skeleton shimmer" />
-                    <div className="video-card__body">
-                      <div className="line shimmer line--short" />
-                      <div className="line shimmer" />
-                      <div className="line shimmer line--wide" />
-                      <div className="line shimmer line--medium" />
-                    </div>
-                  </article>
-                ))}
-              </section>
-            ) : null}
-
-            {status === 'success' && results.length > 0 ? (
-              <section className="results-grid">
-                {results.map((video) => (
-                  <VideoCard
-                    key={video.id}
-                    video={video}
-                    onDownload={setDownloadOptionsVideo}
-                    onAddToPlaylists={handleAddToPlaylists}
-                    onPlay={handlePlayVideo}
-                    onWatch={handleWatchVideo}
-                    playlists={playlists}
-                    activePlaylistId={activePlaylist?.id ?? null}
-                    isAddingToPlaylist={pendingPlaylistVideoId === video.id}
-                    isSubmittingDownload={pendingDownloadVideoIds.includes(video.id)}
-                    latestDownload={getLatestDownloadForVideo(video.id)}
-                  />
-                ))}
-              </section>
-            ) : null}
-          </>
-        ) : null}
-
-        {activePage === 'songs' ? (
-          <DownloadQueuePanel
-            runtime={downloadRuntime}
-            jobs={downloadJobs}
-            errorMessage={downloadsErrorMessage}
-            pendingRemovalIds={pendingDownloadRemovalIds}
-            pendingRenameIds={pendingDownloadRenameIds}
-            pendingRedownloadIds={pendingRedownloadIds}
-            pendingPlaylistVideoId={pendingPlaylistVideoId}
-            playlists={playlists}
-            activePlaylistId={activePlaylist?.id ?? null}
-            onRemoveJob={handleRemoveDownload}
-            onRedownload={handleRedownload}
-            onRenameJob={handleRenameDownload}
-            onAddToPlaylists={handleAddDownloadToPlaylists}
-            onPlay={handlePlayDownload}
-            onWatch={handleWatchDownload}
+  function renderPage() {
+    switch (route.name) {
+      case 'home':
+        return <HomePage />
+      case 'results':
+        return <SearchPage query={route.query} filters={route.filters} />
+      case 'watch':
+        return (
+          <WatchPage
+            key={route.videoId}
+            videoId={route.videoId}
+            startSeconds={route.startSeconds}
+            listId={route.listId}
+            watchQueue={watchQueue}
           />
-        ) : null}
-
-        {activePage === 'playlists' ? (
-          <>
+        )
+      case 'channel':
+        return <ChannelPage key={route.channelRef} channelRef={route.channelRef} tab={route.tab} />
+      case 'playlist':
+        return <PlaylistPage key={route.listId} listId={route.listId} />
+      case 'subscriptions':
+        return <SubscriptionsPage />
+      case 'history':
+        return <HistoryPage />
+      case 'songs':
+        return (
+          <div className="library-page">
+            <DownloadQueuePanel
+              runtime={downloadRuntime}
+              jobs={downloadJobs}
+              errorMessage={downloadsErrorMessage}
+              pendingRemovalIds={pendingDownloadRemovalIds}
+              pendingRenameIds={pendingDownloadRenameIds}
+              pendingRedownloadIds={pendingRedownloadIds}
+              pendingPlaylistVideoId={pendingPlaylistVideoId}
+              playlists={playlists}
+              activePlaylistId={activePlaylist?.id ?? null}
+              onRemoveJob={handleRemoveDownload}
+              onRedownload={handleRedownload}
+              onRenameJob={handleRenameDownload}
+              onAddToPlaylists={handleAddDownloadToPlaylists}
+              onPlay={handlePlayDownload}
+              onWatch={handleWatchDownload}
+            />
+          </div>
+        )
+      case 'playlists':
+        return (
+          <div className="library-page">
             <PlaylistPanel
               playlists={playlists}
               activePlaylistId={activePlaylist?.id ?? null}
@@ -1271,7 +1196,7 @@ function App() {
               isMutating={isMutatingPlaylist}
               pendingVideoId={pendingPlaylistVideoId}
               onSelectPlaylist={setActivePlaylistId}
-              onCreatePlaylist={handleCreatePlaylist}
+              onCreatePlaylist={(name) => void handleCreatePlaylist(name)}
               onRenamePlaylist={handleRenamePlaylist}
               onDeletePlaylist={handleDeletePlaylist}
               onRemoveItem={handleRemovePlaylistItem}
@@ -1293,38 +1218,67 @@ function App() {
               onCreateExport={handleCreateExport}
               onRemoveExport={handleRemoveExport}
             />
-          </>
-        ) : null}
+          </div>
+        )
+      case 'import':
+        return (
+          <div className="library-page">
+            <YouTubePlaylistDownloadPanel
+              exportJobs={exportJobs}
+              errorMessage={exportsErrorMessage}
+              isCreating={isCreatingYouTubePlaylistExport}
+              pendingRemovalIds={pendingExportRemovalIds}
+              onCreateExport={handleCreateYouTubePlaylistExport}
+              onRemoveExport={handleRemoveExport}
+            />
+          </div>
+        )
+    }
+  }
 
-        {activePage === 'playlist' ? (
-          <YouTubePlaylistDownloadPanel
-            exportJobs={exportJobs}
-            errorMessage={exportsErrorMessage}
-            isCreating={isCreatingYouTubePlaylistExport}
-            pendingRemovalIds={pendingExportRemovalIds}
-            onCreateExport={handleCreateYouTubePlaylistExport}
-            onRemoveExport={handleRemoveExport}
-          />
-        ) : null}
+  return (
+    <VideoActionsContext.Provider value={videoActions}>
+      <TopBar
+        initialQuery={route.name === 'results' ? route.query : ''}
+        onToggleSidebar={handleToggleSidebar}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        isProcessing={hasActiveDownloads || hasActiveExports}
+      />
+      <Sidebar
+        mode={sidebarMode}
+        drawerOpen={drawerOpen}
+        onCloseDrawer={() => setDrawerOpen(false)}
+        route={route}
+      />
+      <main
+        className={`yt-main yt-main--sidebar-${sidebarMode} ${
+          isWatchPage ? 'yt-main--watch' : ''
+        } ${currentTrack ? 'yt-main--with-player' : ''}`}
+      >
+        {renderPage()}
       </main>
 
-      {downloadOptionsVideo ? (
+      {downloadTarget ? (
         <DownloadOptionsDialog
-          video={downloadOptionsVideo}
-          isBusy={pendingDownloadVideoIds.includes(downloadOptionsVideo.id)}
+          key={downloadTarget.video.id}
+          video={downloadTarget.video}
+          initialSection={downloadTarget.section}
+          isBusy={pendingDownloadVideoIds.includes(downloadTarget.video.id)}
           onConfirm={handleConfirmDownloadOptions}
-          onCancel={() => setDownloadOptionsVideo(null)}
+          onCancel={() => setDownloadTarget(null)}
         />
       ) : null}
 
-      {watchTarget ? (
-        <VideoPlayerModal
-          key={watchTarget.videoId}
-          videoId={watchTarget.videoId}
-          title={watchTarget.title}
-          channelTitle={watchTarget.channelTitle}
-          sourceUrl={watchTarget.sourceUrl}
-          onClose={() => setWatchTarget(null)}
+      {saveTarget ? (
+        <SaveToPlaylistDialog
+          video={saveTarget}
+          playlists={playlists}
+          isBusy={isMutatingPlaylist || isCreatingPlaylist}
+          onSave={(video, playlistIds, newName) =>
+            void handleSaveToPlaylists(video, playlistIds, newName)
+          }
+          onCancel={() => setSaveTarget(null)}
         />
       ) : null}
 
@@ -1362,8 +1316,7 @@ function App() {
         onAddToPlaylists={handleAddCurrentTrackToPlaylists}
         onClose={() => setPlayerSession(null)}
       />
-      </div>
-    </>
+    </VideoActionsContext.Provider>
   )
 }
 

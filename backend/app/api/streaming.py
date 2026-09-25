@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+import asyncio
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 
 from app.services.streaming import (
@@ -7,6 +10,12 @@ from app.services.streaming import (
     get_video_stream_url,
 )
 from app.services.downloads import get_download_manager
+from app.services.youtube_browse import (
+    BrowseError,
+    get_video_info,
+    pick_audio_only_url,
+    pick_video_only_url,
+)
 
 router = APIRouter()
 
@@ -70,3 +79,38 @@ async def stream_video(video_id: str) -> RedirectResponse:
         url=video_url,
         status_code=status.HTTP_302_FOUND,
     )
+
+
+@router.get("/stream/{video_id}/split/video")
+async def stream_video_only(
+    video_id: str,
+    quality: Annotated[str | None, Query(max_length=12)] = None,
+) -> RedirectResponse:
+    """Redirect to a video-only rendition for the in-app HD player.
+
+    YouTube only serves HD as separate video and audio files, so the player
+    plays this muted and keeps `/split/audio` in sync with it.
+    """
+    try:
+        info = await asyncio.to_thread(get_video_info, video_id)
+        url = pick_video_only_url(info, quality)
+    except BrowseError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    return RedirectResponse(url=url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/stream/{video_id}/split/audio")
+async def stream_audio_only(video_id: str) -> RedirectResponse:
+    """Redirect to the audio track that pairs with `/split/video`.
+
+    Unlike `/stream/{video_id}`, this never serves a downloaded MP3: re-encoded
+    files carry encoder padding that would drift out of sync with the picture.
+    """
+    try:
+        info = await asyncio.to_thread(get_video_info, video_id)
+        url = pick_audio_only_url(info)
+    except BrowseError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    return RedirectResponse(url=url, status_code=status.HTTP_302_FOUND)

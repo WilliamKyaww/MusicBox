@@ -9,12 +9,179 @@ export type VideoSearchResult = {
   duration_label: string
   published_at: string
   video_url: string
+  duration_seconds?: number | null
+  view_count?: number | null
+  channel_thumbnail_url?: string | null
+  live_status?: LiveStatus
+  is_short?: boolean
+}
+
+export type LiveStatus = 'none' | 'is_live' | 'was_live' | 'is_upcoming'
+
+export type ChannelSearchResult = {
+  id: string
+  title: string
+  description: string
+  thumbnail_url: string | null
+  handle: string | null
+  subscriber_count: number | null
+  video_count: number | null
 }
 
 export type SearchResponse = {
   query: string
   total: number
   items: VideoSearchResult[]
+  channels: ChannelSearchResult[]
+  next_page_token: string | null
+}
+
+export type SearchOrder = 'relevance' | 'date' | 'viewCount' | 'rating'
+export type SearchDuration = 'any' | 'short' | 'medium' | 'long'
+export type SearchUploadDate = 'any' | 'hour' | 'today' | 'week' | 'month' | 'year'
+
+export type SearchFilters = {
+  order: SearchOrder
+  duration: SearchDuration
+  uploadDate: SearchUploadDate
+}
+
+export type FeedResponse = {
+  items: VideoSearchResult[]
+  available: boolean
+  message: string | null
+}
+
+export type ChannelTab = 'videos' | 'shorts' | 'live' | 'playlists'
+
+export type ChannelInfo = {
+  id: string
+  name: string
+  handle: string | null
+  description: string
+  avatar_url: string | null
+  banner_url: string | null
+  subscriber_count: number | null
+  url: string
+  is_verified: boolean
+}
+
+export type PlaylistSummary = {
+  id: string
+  title: string
+  thumbnail_url: string | null
+  video_count: number | null
+  channel_title: string | null
+}
+
+export type ChannelPage = {
+  channel: ChannelInfo
+  tab: ChannelTab
+  tab_available: boolean
+  page: number
+  has_more: boolean
+  videos: VideoSearchResult[]
+  playlists: PlaylistSummary[]
+}
+
+export type YouTubePlaylistPage = {
+  id: string
+  title: string
+  description: string
+  channel_title: string | null
+  channel_id: string | null
+  thumbnail_url: string | null
+  video_count: number | null
+  view_count: number | null
+  page: number
+  has_more: boolean
+  items: VideoSearchResult[]
+}
+
+export type Chapter = {
+  title: string
+  start_seconds: number
+  end_seconds: number
+}
+
+export type HeatmapPoint = {
+  start_seconds: number
+  end_seconds: number
+  value: number
+}
+
+export type QualityOption = {
+  id: string
+  label: string
+  height: number
+  fps: number
+}
+
+export type CaptionTrack = {
+  lang: string
+  name: string
+  auto_generated: boolean
+}
+
+export type Storyboard = {
+  urls: string[]
+  width: number
+  height: number
+  rows: number
+  columns: number
+  interval_seconds: number
+}
+
+export type VideoDetails = {
+  id: string
+  title: string
+  description: string
+  channel_id: string
+  channel_title: string
+  channel_handle: string | null
+  channel_thumbnail_url: string | null
+  channel_subscriber_count: number | null
+  channel_is_verified: boolean
+  thumbnail_url: string
+  video_url: string
+  duration_seconds: number | null
+  duration_label: string
+  view_count: number | null
+  like_count: number | null
+  comment_count: number | null
+  published_at: string
+  live_status: LiveStatus
+  width: number | null
+  height: number | null
+  tags: string[]
+  category: string | null
+  chapters: Chapter[]
+  heatmap: HeatmapPoint[]
+  qualities: QualityOption[]
+  captions: CaptionTrack[]
+  storyboard: Storyboard | null
+  local_video_url: string | null
+  embeddable: boolean
+}
+
+export type VideoComment = {
+  id: string
+  author: string
+  author_thumbnail_url: string | null
+  author_channel_id: string | null
+  text: string
+  like_count: number
+  published_at: string
+  reply_count: number
+  is_pinned: boolean
+  is_uploader: boolean
+}
+
+export type CommentsResponse = {
+  items: VideoComment[]
+  next_page_token: string | null
+  disabled: boolean
+  total: number | null
 }
 
 export type DownloadStatus =
@@ -32,9 +199,15 @@ export type DownloadRuntimeStatus = {
 
 export type MediaKind = 'audio' | 'video'
 
-export type VideoQuality = 'best' | '1080' | '720' | '480' | '360'
+export type VideoQuality = 'best' | '2160' | '1440' | '1080' | '720' | '480' | '360'
 
 export type DownloadDestination = 'library' | 'device'
+
+/** A section of a video picked on the watch page, in (fractional) seconds. */
+export type ClipRange = {
+  start: number
+  end: number
+}
 
 export type DownloadSection = {
   startSeconds: number

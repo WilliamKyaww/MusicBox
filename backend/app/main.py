@@ -3,6 +3,16 @@ import binascii
 import secrets
 from pathlib import Path
 
+try:
+    import truststore
+except ImportError:  # pragma: no cover - optional on hosts with a complete CA bundle
+    truststore = None
+else:
+    # Verify TLS against the OS certificate store instead of certifi's bundle, so
+    # HTTPS works on machines where antivirus or a proxy re-signs traffic. This has
+    # to run before httpx or yt-dlp build their SSL contexts.
+    truststore.inject_into_ssl()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
