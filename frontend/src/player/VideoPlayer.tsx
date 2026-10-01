@@ -647,6 +647,7 @@ export function VideoPlayer({
           className="yt-player__embed"
           src={`https://www.youtube-nocookie.com/embed/${details.id}?autoplay=1&rel=0&start=${embedStart}`}
           title={details.title}
+          referrerPolicy="strict-origin-when-cross-origin"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           allowFullScreen
         />

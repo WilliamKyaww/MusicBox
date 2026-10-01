@@ -1,11 +1,14 @@
-const { app, BrowserWindow, Menu, dialog, session, shell, protocol, net } = require('electron')
+const { app, BrowserWindow, Menu, dialog, session, shell, protocol } = require('electron')
 const { randomBytes } = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { startBackend } = require('./backend.cjs')
+const { APP_ID, desktopRequestHeaders, proxyDesktopRequest } = require('./network.cjs')
 
 app.setName('MusicBox')
-app.setAppUserModelId('com.williamkyaww.musicbox')
+app.setAppUserModelId(APP_ID)
+const smokeTest = process.argv.includes('--smoke-test')
+if (smokeTest) app.setPath('userData', fs.mkdtempSync(path.join(app.getPath('temp'), 'musicbox-desktop-smoke-')))
 protocol.registerSchemesAsPrivileged([{ scheme: 'musicbox', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true,
 } }])
@@ -41,7 +44,7 @@ async function launch() {
   const userDir = app.getPath('userData')
   fs.mkdirSync(userDir, { recursive: true })
   configFile = app.isPackaged ? path.join(userDir, 'config.env') : path.join(repoRoot, 'backend/.env')
-  dataDir = app.isPackaged ? path.join(userDir, 'data') : path.join(repoRoot, 'backend/data')
+  dataDir = app.isPackaged || smokeTest ? path.join(userDir, 'data') : path.join(repoRoot, 'backend/data')
   if (!fs.existsSync(configFile)) {
     fs.copyFileSync(app.isPackaged ? path.join(process.resourcesPath, 'config.env.example') : path.join(__dirname, 'config.env.example'), configFile)
   }
@@ -64,37 +67,13 @@ async function launch() {
     if (!isInternalUrl(request.url) || (request.initiatorOrigin && request.initiatorOrigin !== appUrl)) {
       return new Response('Forbidden', { status: 403 })
     }
-    const parsed = new URL(request.url)
-    const target = new URL(parsed.pathname + parsed.search, backend.baseUrl)
-    // Validate after parsing: paths starting with // must not become external URLs.
-    if (target.origin !== backend.baseUrl) return new Response('Forbidden', { status: 403 })
-    const headers = new Headers()
-    for (const name of ['accept', 'content-type', 'range', 'if-range', 'if-none-match', 'if-modified-since']) {
-      const value = request.headers.get(name)
-      if (value) headers.set(name, value)
-    }
-    headers.set('X-MusicBox-Desktop', token)
-    const response = await net.fetch(target.href, {
-      method: request.method, headers,
-      body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer(),
-      redirect: 'manual', signal: request.signal,
-    })
+    const response = await proxyDesktopRequest(request, backend.baseUrl, token, fetch)
     const responseHeaders = new Headers(response.headers)
     responseHeaders.set('Content-Security-Policy', contentSecurityPolicy)
-    const location = responseHeaders.get('location')
-    if (location) {
-      const redirectUrl = new URL(location, backend.baseUrl)
-      if (redirectUrl.origin === backend.baseUrl) responseHeaders.set('location', appUrl + redirectUrl.pathname + redirectUrl.search)
-    }
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers: responseHeaders })
   })
   ownSession.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
-    const headers = { ...details.requestHeaders }
-    for (const key of Object.keys(headers)) {
-      if (key.toLowerCase() === 'x-musicbox-desktop') delete headers[key]
-    }
-    if (new URL(details.url).origin === backend.baseUrl) headers['X-MusicBox-Desktop'] = token
-    callback({ requestHeaders: headers })
+    callback({ requestHeaders: desktopRequestHeaders(details.url, details.requestHeaders, backend.baseUrl, token) })
   })
   ownSession.setPermissionRequestHandler((contents, permission, callback) => {
     callback(isInternalUrl(contents.getURL()) && ['fullscreen', 'clipboard-sanitized-write'].includes(permission))
@@ -109,7 +88,11 @@ async function launch() {
   mainWindow = new BrowserWindow({
     title: 'MusicBox', width: 1320, height: 900, minWidth: 480, minHeight: 600,
     backgroundColor: '#111318', icon: path.join(__dirname, 'assets/icon.png'), show: false,
-    webPreferences: { session: ownSession, contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
+    webPreferences: {
+      session: ownSession, contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true,
+      // The split audio/video player synchronizes on a timer, even when minimized.
+      backgroundThrottling: false,
+    },
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: 'deny' } })
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -135,13 +118,19 @@ async function launch() {
   ]))
   await mainWindow.loadURL(appUrl)
   // A bounded automated launch check closes the window and its backend afterwards.
-  if (process.argv.includes('--smoke-test')) {
+  if (smokeTest) {
     const result = await mainWindow.webContents.executeJavaScript("new Promise(resolve => { const started = Date.now(); const check = () => { const rendered = document.getElementById('root').childElementCount > 0; if (rendered || Date.now() - started > 10000) resolve({title: document.title, rendered}); else setTimeout(check, 100); }; check(); })")
     if (!result.rendered || result.title !== 'MusicBox') throw new Error('Desktop interface did not render.')
     const apiResult = await mainWindow.webContents.executeJavaScript("fetch('/api/health').then(r => r.json())")
     if (apiResult.status !== 'ok') throw new Error('Desktop interface cannot reach the backend.')
     const storageResult = await mainWindow.webContents.executeJavaScript("(() => { localStorage.setItem('musicbox-desktop-check', 'ok'); const result = { value: localStorage.getItem('musicbox-desktop-check'), origin: location.origin }; localStorage.removeItem('musicbox-desktop-check'); return result; })()")
     if (storageResult.value !== 'ok' || storageResult.origin !== appUrl) throw new Error('Desktop storage does not have a stable origin.')
+    if (process.env.MUSICBOX_SMOKE_VIDEO_ID) {
+      await require('./playback-check.cjs').checkPlayback(mainWindow, process.env.MUSICBOX_SMOKE_VIDEO_ID, (message) => {
+        console.log(message)
+        log(message + '\n')
+      })
+    }
     if (process.env.MUSICBOX_SMOKE_SCREENSHOT) {
       fs.writeFileSync(process.env.MUSICBOX_SMOKE_SCREENSHOT, (await mainWindow.webContents.capturePage()).toPNG())
     }
