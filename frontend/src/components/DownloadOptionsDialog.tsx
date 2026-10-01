@@ -77,7 +77,10 @@ export function DownloadOptionsDialog({
   // A section picked on the watch page usually means a video clip.
   const [mediaKind, setMediaKind] = useState<MediaKind>(hasInitialSection ? 'video' : 'audio')
   const [videoQuality, setVideoQuality] = useState<VideoQuality>('best')
-  const [destination, setDestination] = useState<DownloadDestination>('library')
+  // Clips are usually one-off saves, so they go straight to this device.
+  const [destination, setDestination] = useState<DownloadDestination>(
+    hasInitialSection ? 'device' : 'library',
+  )
   const [sectionPreset, setSectionPreset] = useState<SectionPresetId>(
     hasInitialSection ? 'custom' : 'full',
   )
@@ -147,7 +150,7 @@ export function DownloadOptionsDialog({
       title="Download options"
       description={video.title}
       confirmLabel={
-        destination === 'device' ? 'Download to device' : 'Add to library'
+        destination === 'device' ? 'Download' : 'Add to library'
       }
       isBusy={isBusy}
       onConfirm={handleConfirm}

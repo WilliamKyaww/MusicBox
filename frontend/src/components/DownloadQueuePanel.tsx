@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  CloseIcon,
   DownloadIcon,
   ImageIcon,
   PencilIcon,
@@ -29,6 +30,7 @@ type DownloadQueuePanelProps = {
   playlists: Playlist[]
   activePlaylistId: string | null
   onRemoveJob: (job: DownloadJob, deleteFile: boolean) => void
+  onCancelJob: (job: DownloadJob) => void
   onRedownload: (job: DownloadJob) => void
   onRenameJob: (job: DownloadJob, title: string) => void
   onAddToPlaylists: (job: DownloadJob, playlistIds: string[]) => void
@@ -68,6 +70,7 @@ export function DownloadQueuePanel({
   playlists,
   activePlaylistId,
   onRemoveJob,
+  onCancelJob,
   onRedownload,
   onRenameJob,
   onAddToPlaylists,
@@ -321,6 +324,21 @@ export function DownloadQueuePanel({
                           }
                         >
                           <TrashIcon className="action-icon" />
+                        </button>
+                      ) : null}
+
+                      {job.status === 'queued' ||
+                      job.status === 'downloading' ||
+                      job.status === 'converting' ? (
+                        <button
+                          type="button"
+                          className="download-job__cancel"
+                          onClick={() => onCancelJob(job)}
+                          disabled={pendingRemovalIds.includes(job.id)}
+                          title="Cancel download and delete partial files"
+                        >
+                          <CloseIcon className="action-icon" />
+                          {pendingRemovalIds.includes(job.id) ? 'Cancelling…' : 'Cancel'}
                         </button>
                       ) : null}
 

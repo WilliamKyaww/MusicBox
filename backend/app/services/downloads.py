@@ -24,10 +24,58 @@ import httpx
 
 try:
     import yt_dlp
-    from yt_dlp.utils import download_range_func
+    from yt_dlp.downloader import external as _ytdlp_external
+    from yt_dlp.postprocessor import ffmpeg as _ytdlp_ffmpeg
+    from yt_dlp.utils import DownloadCancelled, Popen as _YtdlpPopen, download_range_func
 except ImportError:  # pragma: no cover - depends on local environment
     yt_dlp = None
     download_range_func = None
+    DownloadCancelled = RuntimeError
+
+# Section downloads, merging and MP3 conversion all run ffmpeg as a child
+# process that reports no progress, so a cancel flag alone would only take effect
+# once ffmpeg finished. Every process yt-dlp starts from a job's worker thread is
+# recorded here, letting a cancel stop it straight away.
+_job_context = threading.local()
+_job_processes: dict[str, list] = {}
+_killed_job_ids: set[str] = set()
+_job_processes_lock = threading.Lock()
+
+if yt_dlp is not None:
+
+    class _TrackedPopen(_YtdlpPopen):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            job_id = getattr(_job_context, "job_id", None)
+            if not job_id:
+                return
+            with _job_processes_lock:
+                killed = job_id in _killed_job_ids
+                if not killed:
+                    _job_processes.setdefault(job_id, []).append(self)
+            if killed:
+                # Started after the cancel: stop it before it does any work.
+                self.kill()
+
+    _ytdlp_external.Popen = _TrackedPopen
+    _ytdlp_ffmpeg.Popen = _TrackedPopen
+
+
+def _kill_job_processes(job_id: str) -> None:
+    with _job_processes_lock:
+        _killed_job_ids.add(job_id)
+        processes = _job_processes.pop(job_id, [])
+    for process in processes:
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+
+def _forget_job_processes(job_id: str) -> None:
+    with _job_processes_lock:
+        _job_processes.pop(job_id, None)
+        _killed_job_ids.discard(job_id)
 
 INVALID_FILENAME_PATTERN = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 MULTISPACE_PATTERN = re.compile(r"\s+")
@@ -191,6 +239,7 @@ class DownloadManager:
         self._registry_path = self.settings.downloads_dir / DOWNLOAD_REGISTRY_FILENAME
         self._jobs: dict[str, _DownloadRecord] = {}
         self._active_jobs_by_key: dict[str, str] = {}
+        self._cancelled_job_ids: set[str] = set()
         self._lock = threading.RLock()
         self._worker_semaphore = threading.BoundedSemaphore(
             max(1, self.settings.max_concurrent_downloads)
@@ -351,6 +400,29 @@ class DownloadManager:
 
             return job_id, deleted_file
 
+    def cancel_job(self, job_id: str) -> str:
+        """Stop a queued or running download and forget it, removing partial files."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise KeyError(job_id)
+
+            if job.status not in ACTIVE_JOB_STATUSES:
+                raise DownloadRuntimeError("Only queued or running downloads can be cancelled.")
+
+            self._cancelled_job_ids.add(job_id)
+            self._release_active_job(job_id)
+            self._jobs.pop(job_id, None)
+            self._persist_registry_unlocked()
+
+        # The worker thread notices the cancel, stops and deletes the job folder.
+        _kill_job_processes(job_id)
+        return job_id
+
+    def _is_cancelled(self, job_id: str) -> bool:
+        with self._lock:
+            return job_id in self._cancelled_job_ids
+
     def redownload_job(self, job_id: str) -> tuple[DownloadJob, bool]:
         runtime = self.get_runtime_status()
         if not runtime.available:
@@ -504,11 +576,20 @@ class DownloadManager:
 
     def _run_job_sync(self, job_id: str) -> None:
         self._worker_semaphore.acquire()
+        _job_context.job_id = job_id
         try:
-            self._download_with_yt_dlp(job_id)
+            if not self._is_cancelled(job_id):
+                self._download_with_yt_dlp(job_id)
         except Exception as exc:  # pragma: no cover - depends on local tools/network
-            self._mark_failed(job_id, str(exc))
+            if not self._is_cancelled(job_id):
+                self._mark_failed(job_id, str(exc))
         finally:
+            _job_context.job_id = None
+            _forget_job_processes(job_id)
+            if self._is_cancelled(job_id):
+                shutil.rmtree(self.settings.downloads_dir / job_id, ignore_errors=True)
+                with self._lock:
+                    self._cancelled_job_ids.discard(job_id)
             self._release_active_job(job_id)
             self._worker_semaphore.release()
 
@@ -609,6 +690,9 @@ class DownloadManager:
         output_template = str(job_dir / f"{safe_base_name}.%(ext)s")
 
         def progress_hook(progress_data: dict) -> None:
+            if self._is_cancelled(job_id):
+                raise DownloadCancelled("The download was cancelled.")
+
             status = progress_data.get("status")
 
             if status == "downloading":
@@ -670,8 +754,14 @@ class DownloadManager:
             progress_hooks=[progress_hook],
         )
 
+        with self._lock:
+            source_url = self._jobs[job_id].source_url
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([self._jobs[job_id].source_url])
+            ydl.download([source_url])
+
+        if self._is_cancelled(job_id):
+            raise DownloadCancelled("The download was cancelled.")
 
         final_file = self._locate_final_file(job_dir, media_kind)
         if final_file is None:

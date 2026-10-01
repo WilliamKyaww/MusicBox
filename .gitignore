@@ -4,6 +4,13 @@ frontend/dist/
 frontend/dist-ssr/
 backend/.venv/
 .venv/
+desktop/node_modules/
+desktop/.venv/
+desktop/build/
+desktop/dist/
+desktop/resources/
+desktop/assets/icon.png
+desktop/assets/icon.ico
 
 # Runtime data and secrets
 backend/.env

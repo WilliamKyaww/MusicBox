@@ -53,6 +53,12 @@ export async function removeDownload(downloadId: string, deleteFile = true) {
   )
 }
 
+export async function cancelDownload(downloadId: string) {
+  return apiFetchJson<RemoveDownloadResponse>(`/api/downloads/${downloadId}/cancel`, {
+    method: 'POST',
+  })
+}
+
 export async function renameDownload(downloadId: string, title: string) {
   return apiFetchJson<DownloadJob>(`/api/downloads/${downloadId}`, {
     method: 'PATCH',

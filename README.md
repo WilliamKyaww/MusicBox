@@ -47,6 +47,40 @@ FFMPEG_BINARY=ffmpeg
 
 ## Running the app
 
+### Desktop App (Windows)
+
+Double-click `Start MusicBox Desktop.bat`, or run:
+
+```powershell
+cd desktop
+npm.cmd ci
+npm.cmd start
+```
+
+The Electron app builds the interface, starts its own local backend, and opens
+MusicBox in a desktop window. It uses the existing `backend/.env` and library
+when launched from source. The backend closes when you quit MusicBox.
+The MusicBox menu opens the settings file, library, and backend logs.
+
+To build a Windows installer:
+
+```powershell
+cd desktop
+npm.cmd run dist
+```
+
+This bundles Python, the frontend, FFmpeg, and FFprobe. Build dependencies are
+installed in `desktop/.venv`; installers are generated in `desktop/dist/`.
+`npm.cmd run pack` produces an unpacked desktop app for testing.
+
+The installed app stores its configuration in `%APPDATA%\MusicBox\config.env`
+and its music/playlists in `%APPDATA%\MusicBox\data`. Set your YouTube key
+using **MusicBox > Open Settings File**, then restart the app. Existing browser
+history and subscriptions are separate from the desktop app's browser storage.
+The installer includes no personal keys or existing library files.
+
+### Web App
+
 Double-click `Start MusicBox.bat` in the repo root. It starts the backend and the
 frontend in two minimized windows and opens the app in your browser. Close those
 two windows to stop MusicBox.

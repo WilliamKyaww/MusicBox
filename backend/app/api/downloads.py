@@ -149,6 +149,21 @@ async def redownload_download(job_id: str) -> EnqueueDownloadResponse:
     return EnqueueDownloadResponse(job=job, deduplicated=deduplicated)
 
 
+@router.post("/downloads/{job_id}/cancel", response_model=RemoveDownloadResponse)
+async def cancel_download(job_id: str) -> RemoveDownloadResponse:
+    """Stop a queued or running download; it is removed along with any partial files."""
+    manager = get_download_manager()
+
+    try:
+        cancelled_job_id = manager.cancel_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Download not found.") from exc
+    except DownloadRuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    return RemoveDownloadResponse(removed_job_id=cancelled_job_id, deleted_file=True)
+
+
 @router.delete("/downloads/{job_id}", response_model=RemoveDownloadResponse)
 async def remove_download(job_id: str, delete_file: bool = True) -> RemoveDownloadResponse:
     manager = get_download_manager()

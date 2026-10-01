@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // Fail instead of drifting to 5174: the launcher and backend CORS expect 5173.
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

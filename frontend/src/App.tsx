@@ -9,6 +9,7 @@ import {
 } from 'react'
 import {
   DEFAULT_DOWNLOAD_OPTIONS,
+  cancelDownload,
   enqueueDownload,
   fetchDownloads,
   getDirectDownloadHref,
@@ -364,6 +365,31 @@ function App() {
           current.filter((id) => id !== job.id),
         )
       }
+  }
+
+  async function handleCancelDownload(job: DownloadJob) {
+    setPendingDownloadRemovalIds((current) =>
+      current.includes(job.id) ? current : [...current, job.id],
+    )
+
+    try {
+      await cancelDownload(job.id)
+      startTransition(() => {
+        setDownloadJobs((current) => current.filter((item) => item.id !== job.id))
+        setDownloadsErrorMessage(null)
+      })
+      pushToast(`Cancelled the download of "${job.title}".`)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not cancel the download.'
+
+      startTransition(() => {
+        setDownloadsErrorMessage(message)
+      })
+      pushToast(message)
+    } finally {
+      setPendingDownloadRemovalIds((current) => current.filter((id) => id !== job.id))
+    }
   }
 
   async function handleRedownload(job: DownloadJob) {
@@ -1177,6 +1203,7 @@ function App() {
               playlists={playlists}
               activePlaylistId={activePlaylist?.id ?? null}
               onRemoveJob={handleRemoveDownload}
+              onCancelJob={handleCancelDownload}
               onRedownload={handleRedownload}
               onRenameJob={handleRenameDownload}
               onAddToPlaylists={handleAddDownloadToPlaylists}

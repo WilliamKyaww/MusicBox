@@ -1,0 +1,72 @@
+{
+  "name": "musicbox-desktop",
+  "productName": "MusicBox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MusicBox desktop music and video player",
+  "author": "WilliamKyaww",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "node scripts/start.mjs",
+    "test": "node --test tests/*.test.cjs",
+    "pack": "node scripts/build.mjs --dir",
+    "dist": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "png-to-ico": "3.0.2",
+    "sharp": "0.35.5"
+  },
+  "build": {
+    "appId": "com.williamkyaww.musicbox",
+    "productName": "MusicBox",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.cjs",
+      "backend.cjs",
+      "package.json",
+      "assets/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend"
+      },
+      {
+        "from": "resources/frontend",
+        "to": "frontend"
+      },
+      {
+        "from": "resources/tools",
+        "to": "tools"
+      },
+      {
+        "from": "config.env.example",
+        "to": "config.env.example"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
