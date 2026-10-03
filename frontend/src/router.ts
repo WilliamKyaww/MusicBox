@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { parseMusicRoute, type MusicRoute } from './experience'
 import { DEFAULT_SEARCH_FILTERS } from './api/search'
 import type {
   ChannelTab,
@@ -13,6 +14,7 @@ import type {
  * without any server-side routing for the static build.
  */
 export type Route =
+  | MusicRoute
   | { name: 'home' }
   | { name: 'results'; query: string; filters: SearchFilters }
   | { name: 'watch'; videoId: string; startSeconds: number | null; listId: string | null }
@@ -43,9 +45,12 @@ function parseStartTime(value: string | null) {
 }
 
 export function parseRoute(hash: string): Route {
+  const musicRoute = parseMusicRoute(hash)
+  if (musicRoute) return musicRoute
   const raw = hash.replace(/^#/, '') || '/'
   const [pathPart, queryPart = ''] = raw.split('?')
-  const segments = pathPart.split('/').filter(Boolean).map(decodeURIComponent)
+  let segments: string[]
+  try { segments = pathPart.split('/').filter(Boolean).map(decodeURIComponent) } catch { return { name: 'home' } }
   const params = new URLSearchParams(queryPart)
 
   switch (segments[0]) {

@@ -57,6 +57,12 @@ import { WatchPage } from './pages/WatchPage'
 import { navigate, parseRoute, paths, useHash } from './router'
 import { useScrollRestoration } from './scrollRestoration'
 import { VideoActionsContext, type VideoActions, type WatchQueue } from './videoActions'
+import { rememberExperience } from './experience'
+import { recordHistory } from './library'
+import { MusicWorkspace } from './music/MusicWorkspace'
+import { MusicIcon } from './music/MusicIcon'
+import { enqueueTrack, moveQueuedTrack, readSavedSession, removeQueuedTrack, shuffleTracks, toggleQueueShuffle, type PlayerSession, type PlayerTrack } from './music/queue'
+import { getMusicState, toggleLiked, updateMusicState, useMusicStore } from './music/store'
 import type {
   DownloadJob,
   DiscordPresenceStatus,
@@ -71,24 +77,10 @@ import type {
 } from './types'
 import './App.css'
 import './youtube.css'
+import './music/music.css'
 
 type ToastMessage = { id: number; message: string }
-type LoopMode = 'off' | 'once' | 'all'
-type PlayerTrack = {
-  videoId: string
-  title: string
-  thumbnailUrl: string | null
-  channelTitle: string
-  sourceUrl: string
-  durationLabel: string | null
-}
-type PlayerSession = {
-  source: 'single' | 'playlist'
-  playlistId: string | null
-  tracks: PlayerTrack[]
-  index: number
-  shuffle: boolean
-}
+type LoopMode = 'off' | 'once' | 'all' | 'one'
 type DownloadTarget = {
   video: VideoSearchResult
   section?: DownloadSection
@@ -128,7 +120,10 @@ function App() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
-  const [playerSession, setPlayerSession] = useState<PlayerSession | null>(null)
+  const [playerSession, setPlayerSession] = useState<PlayerSession | null>(() => route.name === 'watch' ? null : readSavedSession())
+  const [playRequest, setPlayRequest] = useState(0)
+  const music = useMusicStore()
+  const isMusic = route.name === 'music'
   const [loopMode, setLoopMode] = useState<LoopMode>('off')
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([])
@@ -146,7 +141,7 @@ function App() {
   const [exportJobs, setExportJobs] = useState<PlaylistExportJob[]>([])
   const [discordPresenceStatus, setDiscordPresenceStatus] =
     useState<DiscordPresenceStatus | null>(null)
-  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null)
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(route.name === 'music' && route.view === 'playlist' ? route.playlistId : null)
   const [playlistsErrorMessage, setPlaylistsErrorMessage] = useState<string | null>(
     null,
   )
@@ -233,14 +228,17 @@ function App() {
       .map(toPlayerTrack)
   }
 
-  function shuffleTracks(tracks: PlayerTrack[]) {
-    const shuffled = [...tracks]
-    for (let index = shuffled.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(Math.random() * (index + 1))
-      ;[shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]]
-    }
-    return shuffled
-  }
+  useEffect(() => {
+    rememberExperience(hash)
+    document.documentElement.dataset.experience = isMusic ? 'music' : 'video'
+  }, [hash, isMusic])
+
+  useEffect(() => {
+    try {
+      if (playerSession) localStorage.setItem('musicbox-audio-queue', JSON.stringify(playerSession))
+      else localStorage.removeItem('musicbox-audio-queue')
+    } catch { /* A full or disabled localStorage must not stop playback. */ }
+  }, [playerSession])
 
   const loadDownloads = useEffectEvent(async (signal?: AbortSignal) => {
     try {
@@ -561,6 +559,7 @@ function App() {
         setPlaylistsErrorMessage(null)
       })
       pushToast(`Renamed playlist to "${updated.name}".`)
+      return true
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Could not rename the playlist.'
@@ -568,6 +567,7 @@ function App() {
       startTransition(() => {
         setPlaylistsErrorMessage(message)
       })
+      return false
     } finally {
       setIsMutatingPlaylist(false)
     }
@@ -593,6 +593,7 @@ function App() {
         setPlaylistsErrorMessage(null)
       })
       pushToast(`Deleted "${deletedPlaylistName}".`)
+      return true
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Could not delete the playlist.'
@@ -600,6 +601,7 @@ function App() {
       startTransition(() => {
         setPlaylistsErrorMessage(message)
       })
+      return false
     } finally {
       setIsMutatingPlaylist(false)
     }
@@ -912,9 +914,11 @@ function App() {
   useEffect(() => {
     function handleHashChange() {
       setDrawerOpen(false)
-      if (parseRoute(window.location.hash).name === 'watch') {
+      const nextRoute = parseRoute(window.location.hash)
+      if (nextRoute.name === 'watch') {
         setPlayerSession(null)
       }
+      if (nextRoute.name === 'music' && nextRoute.view === 'playlist') setActivePlaylistId(nextRoute.playlistId)
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
@@ -946,6 +950,7 @@ function App() {
     sourceUrl = `https://www.youtube.com/watch?v=${videoId}`,
     durationLabel: string | null = null,
   ) {
+    setPlayRequest(current => current + 1)
     setPlayerSession({
       source: 'single',
       playlistId: null,
@@ -971,12 +976,15 @@ function App() {
       return
     }
 
+    const ordered = shuffle ? shuffleTracks(tracks) : tracks
+    setPlayRequest(current => current + 1)
     setPlayerSession({
       source: 'playlist',
       playlistId: playlist.id,
-      tracks: shuffle ? shuffleTracks(tracks) : tracks,
+      tracks: ordered,
       index: 0,
       shuffle,
+      orderedUpcoming: shuffle ? tracks.filter(track => track !== ordered[0]) : undefined,
     })
   }
 
@@ -988,6 +996,7 @@ function App() {
     }
 
     const targetTrack = toPlayerTrack(item)
+    setPlayRequest(current => current + 1)
     if (shuffle) {
       const remainingTracks = shuffleTracks(
         tracks.filter((track) => track.videoId !== targetTrack.videoId),
@@ -998,6 +1007,7 @@ function App() {
         tracks: [targetTrack, ...remainingTracks],
         index: 0,
         shuffle: true,
+        orderedUpcoming: tracks.filter(track => track.videoId !== targetTrack.videoId),
       })
       return
     }
@@ -1012,8 +1022,9 @@ function App() {
   }
 
   function handlePreviousTrack() {
+    setPlayRequest(current => current + 1)
     setPlayerSession((current) => {
-      if (!current || current.source !== 'playlist') {
+      if (!current) {
         return current
       }
 
@@ -1025,26 +1036,28 @@ function App() {
   }
 
   function handleNextTrack() {
+    setPlayRequest(current => current + 1)
     setPlayerSession((current) => {
-      if (!current || current.source !== 'playlist') {
+      if (!current) {
         return current
       }
 
       return {
         ...current,
-        index: Math.min(current.tracks.length - 1, current.index + 1),
+        index: current.index < current.tracks.length - 1 ? current.index + 1 : loopMode === 'all' ? 0 : current.index,
       }
     })
   }
 
   function handleTrackEnded() {
+    setPlayRequest(current => current + 1)
     setPlayerSession((current) => {
-      if (!current || current.source !== 'playlist') {
+      if (!current) {
         return current
       }
 
       if (current.index >= current.tracks.length - 1) {
-        return current
+        return loopMode === 'all' ? { ...current, index: 0 } : current
       }
 
       return {
@@ -1055,45 +1068,12 @@ function App() {
   }
 
   function handleTogglePlayerShuffle() {
-    setPlayerSession((current) => {
-      if (!current || current.source !== 'playlist') {
-        return current
-      }
-
-      const currentTrack = current.tracks[current.index]
-      const playlist = playlists.find((entry) => entry.id === current.playlistId)
-      if (!currentTrack || !playlist) {
-        return current
-      }
-
-      if (current.shuffle) {
-        const orderedTracks = getOrderedPlaylistTracks(playlist)
-        return {
-          ...current,
-          tracks: orderedTracks,
-          index: Math.max(
-            0,
-            orderedTracks.findIndex((track) => track.videoId === currentTrack.videoId),
-          ),
-          shuffle: false,
-        }
-      }
-
-      const orderedTracks = getOrderedPlaylistTracks(playlist)
-      const remainingTracks = shuffleTracks(
-        orderedTracks.filter((track) => track.videoId !== currentTrack.videoId),
-      )
-      return {
-        ...current,
-        tracks: [currentTrack, ...remainingTracks],
-        index: 0,
-        shuffle: true,
-      }
-    })
+    setPlayerSession(current => current ? toggleQueueShuffle(current) : current)
   }
 
   function handleToggleLoopMode() {
     setLoopMode((current) => {
+      if (isMusic) return current === 'off' ? 'all' : current === 'all' ? 'one' : 'off'
       if (current === 'off') {
         return 'once'
       }
@@ -1111,7 +1091,7 @@ function App() {
   const activePlaylist =
     playlists.find((playlist) => playlist.id === activePlaylistId) ?? playlists[0] ?? null
   const currentTrack = playerSession?.tracks[playerSession.index] ?? null
-  const isPlaylistPlayback = playerSession?.source === 'playlist'
+  const isPlaylistPlayback = Boolean(playerSession && (playerSession.source !== 'single' || playerSession.tracks.length > 1))
   const currentPlaybackPlaylistName =
     playerSession?.source === 'playlist'
       ? playlists.find((playlist) => playlist.id === playerSession.playlistId)?.name ?? null
@@ -1119,6 +1099,26 @@ function App() {
   const currentTrackDiscordThumbnailUrl = currentTrack
     ? getDiscordPresenceThumbnailHref(currentTrack.videoId, getPlaylistSafeThumbnailUrl(currentTrack))
     : null
+
+  const currentVideo = currentTrack ? {
+    ...toVideoSearchResult(currentTrack),
+    thumbnail_url: currentTrack.thumbnailUrl || getPlaylistSafeThumbnailUrl(currentTrack),
+  } : null
+
+  function videoToTrack(video: VideoSearchResult): PlayerTrack {
+    return { videoId: video.id, title: video.title, channelTitle: video.channel_title, thumbnailUrl: video.thumbnail_url, sourceUrl: video.video_url, durationLabel: video.duration_label }
+  }
+
+  function handleMusicPlay(videos: VideoSearchResult[], index = 0, playlistId?: string) {
+    if (!videos.length) return
+    setPlayRequest(current => current + 1)
+    setPlayerSession({ source: playlistId ? 'playlist' : 'queue', playlistId: playlistId ?? null, tracks: videos.map(videoToTrack), index: Math.max(0, Math.min(index, videos.length - 1)), shuffle: false })
+  }
+
+  function handleEnqueue(video: VideoSearchResult, next: boolean) {
+    setPlayerSession(current => enqueueTrack(current, videoToTrack(video), next))
+    pushToast(next ? 'Added to play next.' : 'Added to queue.')
+  }
 
   async function handleAddCurrentTrackToPlaylists(playlistIds: string[]) {
     if (!currentTrack) {
@@ -1165,13 +1165,15 @@ function App() {
     }
   }
 
-  function renderPage() {
-    switch (route.name) {
+  function renderPage(pageName = route.name) {
+    switch (pageName) {
       case 'home':
         return <HomePage />
       case 'results':
+        if (route.name !== 'results') return null
         return <SearchPage query={route.query} filters={route.filters} />
       case 'watch':
+        if (route.name !== 'watch') return null
         return (
           <WatchPage
             key={route.videoId}
@@ -1182,8 +1184,10 @@ function App() {
           />
         )
       case 'channel':
+        if (route.name !== 'channel') return null
         return <ChannelPage key={route.channelRef} channelRef={route.channelRef} tab={route.tab} />
       case 'playlist':
+        if (route.name !== 'playlist') return null
         return <PlaylistPage key={route.listId} listId={route.listId} />
       case 'subscriptions':
         return <SubscriptionsPage />
@@ -1265,6 +1269,21 @@ function App() {
 
   return (
     <VideoActionsContext.Provider value={videoActions}>
+      {route.name === 'music' ? <MusicWorkspace
+        route={route} playlists={playlists} downloads={downloadJobs} session={playerSession} currentVideo={currentVideo}
+        playlistError={playlistsErrorMessage} busy={isCreatingPlaylist || isMutatingPlaylist}
+        onPlay={handleMusicPlay} onEnqueue={handleEnqueue}
+        onQueueJump={index => { setPlayRequest(current => current + 1); setPlayerSession(current => current && index >= 0 && index < current.tracks.length ? { ...current, index } : current) }}
+        onQueueRemove={index => setPlayerSession(current => current ? removeQueuedTrack(current, index) : current)}
+        onQueueMove={(index, direction) => setPlayerSession(current => current ? moveQueuedTrack(current, index, direction) : current)}
+        onQueueClear={() => setPlayerSession(current => current ? { ...current, tracks: current.tracks.slice(0, current.index + 1), shuffle: false, orderedUpcoming: undefined } : current)}
+        onDownload={video => setDownloadTarget({ video })} onSave={setSaveTarget}
+        onCreatePlaylist={handleCreatePlaylist} onSelectPlaylist={setActivePlaylistId}
+        onRenamePlaylist={handleRenamePlaylist} onDeletePlaylist={handleDeletePlaylist}
+        onRemoveItem={handleRemovePlaylistItem} onMoveItem={handleMovePlaylistItem} onToast={pushToast}
+        downloadsPanel={renderPage('songs')} importsPanel={renderPage('import')}
+        exportsPanel={<PlaylistExportPanel activePlaylist={activePlaylist} exportJobs={exportJobs} errorMessage={exportsErrorMessage} isCreatingExport={isCreatingExport} pendingRemovalIds={pendingExportRemovalIds} onCreateExport={handleCreateExport} onRemoveExport={handleRemoveExport}/>}
+      /> : <>
       <TopBar
         initialQuery={route.name === 'results' ? route.query : ''}
         onToggleSidebar={handleToggleSidebar}
@@ -1285,6 +1304,7 @@ function App() {
       >
         {renderPage()}
       </main>
+      </>}
 
       {downloadTarget ? (
         <DownloadOptionsDialog
@@ -1311,6 +1331,17 @@ function App() {
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <AudioPlayer
+        variant={isMusic ? 'music' : 'video'}
+        playRequest={playRequest}
+        autoplay={playRequest > 0}
+        hasMultipleTracks={Boolean(playerSession && playerSession.tracks.length > 1)}
+        sleepAt={music.sleepAt}
+        onSleep={() => { updateMusicState({ sleepAt: null }); pushToast('Sleep timer: playback paused.') }}
+        onTrackPlaying={() => { if (currentVideo && !getMusicState().privateSession) recordHistory(currentVideo) }}
+        extraControls={isMusic && currentVideo ? <>
+          <button className={`music-icon-button ${music.liked.some(v => v.id === currentVideo.id) ? 'is-green' : ''}`} aria-label="Like playing song" aria-pressed={music.liked.some(v => v.id === currentVideo.id)} onClick={() => toggleLiked(currentVideo)}><MusicIcon name="heart" filled={music.liked.some(v => v.id === currentVideo.id)}/></button>
+          <button className="music-icon-button" aria-label="Open play queue" onClick={() => updateMusicState({ sidebar: music.sidebar === 'queue' ? null : 'queue' })}><MusicIcon name="queue"/></button>
+        </> : null}
         videoId={currentTrack?.videoId ?? null}
         title={currentTrack?.title ?? null}
         thumbnailUrl={currentTrack?.thumbnailUrl ?? null}
@@ -1320,14 +1351,14 @@ function App() {
         playlistName={currentPlaybackPlaylistName}
         streamUrl={currentTrack ? getStreamUrl(currentTrack.videoId) : null}
         discordPresenceEnabled={Boolean(
-          discordPresenceStatus?.enabled &&
+          !music.privateSession && discordPresenceStatus?.enabled &&
             discordPresenceStatus?.configured &&
             discordPresenceStatus?.available,
         )}
         isPlaylistPlayback={isPlaylistPlayback}
         canGoPrevious={Boolean(playerSession && playerSession.index > 0)}
         canGoNext={Boolean(
-          playerSession && playerSession.index < playerSession.tracks.length - 1,
+          playerSession && (playerSession.index < playerSession.tracks.length - 1 || loopMode === 'all'),
         )}
         shuffleEnabled={Boolean(playerSession?.shuffle)}
         loopMode={loopMode}

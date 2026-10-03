@@ -1,8 +1,26 @@
 # MusicBox
 
-MusicBox is a personal, self-hosted music tool that searches YouTube, queues MP3 downloads locally, and grows into playlist management and local playback over time.
+MusicBox is a personal, self-hosted music and video player with two switchable experiences sharing one library.
 
 Warning: vibe coded
+
+## Video and Music Experiences
+
+Use the **Video / Music** switch in the top bar on desktop or web. The app remembers your last music page and the last non-playing video page. Audio continues when switching views; deliberately opening a video stops the audio player to prevent overlapping playback.
+
+- **Video** keeps the YouTube-style browsing, channels, subscriptions, watch history, HD player, captions, comments, chapters, clips, and download tools from `main`.
+- **Music** restores the audio-first workflow from `legacy-before-youtube-ui` in a Spotify-inspired layout: Your Library, Liked Songs, recently played, playlists, a bottom player, Now Playing, and an editable queue.
+- Both views use the same backend playlists, downloads, exports, and Discord Presence integration. No library migration or duplicate backend is needed.
+- Music adds playlist pins and folders, library/track filtering and sorting, play-next/add-to-queue, queue reordering/removal, queue persistence, repeat queue/track, private audio listening, a sleep timer, media keys, and remembered volume/mute.
+- Likes, folders, pins, history, and queue preferences are device/browser-local. A restored queue starts paused. Private listening and the sleep timer reset when the app restarts. Private listening disables new audio history and Discord sharing; it is not an anonymous network mode.
+
+Music view still plays YouTube or your downloaded audio, **not Spotify's streaming catalog**. The import page can preview Spotify playlist metadata using the existing backend configuration and search individual tracks on YouTube. It does not claim account sync or automatic Spotify playback.
+
+This is not full Spotify feature parity. Spotify Connect, Jam, Blend, AI DJ, licensed lyrics, podcasts/audiobook catalog integration, account/cloud sync, Smart Shuffle, crossfade, gapless transitions, equalizer, and loudness normalization are not implemented. The researched feature inventory and remaining work are in `docs/spotify-feature-audit.md` (local documentation).
+
+### Interface Tests
+
+From `frontend`, run `npm run test:unit` for queue/routing checks and `npm run test:e2e` for browser integration tests. Install the test browser once with `npx playwright install chromium`, or set `PW_CHANNEL=chrome` to use an installed Chrome. Browser tests use isolated storage, mocked APIs, and silent audio, not your real library. Desktop networking checks remain under `desktop` with `npm test`.
 
 ## Repo structure
 

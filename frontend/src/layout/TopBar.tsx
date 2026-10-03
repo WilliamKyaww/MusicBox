@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { navigate, paths } from '../router'
 import { CloseIcon, MenuIcon, MoonIcon, SearchIcon, SunIcon } from '../components/Icons'
+import { ExperienceSwitcher } from '../components/ExperienceSwitcher'
 
 type TopBarProps = {
   initialQuery: string
@@ -93,6 +94,7 @@ export function TopBar({
       <SearchForm key={initialQuery} initialQuery={initialQuery} />
 
       <div className="yt-topbar__end">
+        <ExperienceSwitcher active="video" />
         {isProcessing ? (
           <a className="yt-topbar__status" href={paths.songs()} title="Downloads in progress">
             <span className="yt-spinner yt-spinner--small" />

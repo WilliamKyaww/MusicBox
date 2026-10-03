@@ -94,6 +94,7 @@ async function launch() {
       backgroundThrottling: false,
     },
   })
+  if (smokeTest) mainWindow.webContents.setAudioMuted(true)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: 'deny' } })
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!isInternalUrl(url)) { event.preventDefault(); openExternal(url) }
@@ -127,6 +128,12 @@ async function launch() {
     if (storageResult.value !== 'ok' || storageResult.origin !== appUrl) throw new Error('Desktop storage does not have a stable origin.')
     if (process.env.MUSICBOX_SMOKE_VIDEO_ID) {
       await require('./playback-check.cjs').checkPlayback(mainWindow, process.env.MUSICBOX_SMOKE_VIDEO_ID, (message) => {
+        console.log(message)
+        log(message + '\n')
+      })
+    }
+    if (process.env.MUSICBOX_SMOKE_MUSIC === '1') {
+      await require('./experience-check.cjs').checkExperiences(mainWindow, process.env.MUSICBOX_SMOKE_VIDEO_ID, (message) => {
         console.log(message)
         log(message + '\n')
       })
