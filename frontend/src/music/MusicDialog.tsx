@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { MusicIcon } from './MusicIcon'
 
 export function MusicDialog({
   title,
@@ -22,7 +23,7 @@ export function MusicDialog({
     document.body.style.overflow = 'hidden'
     const focusable = () => [
       ...(ref.current?.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), input, select, a[href], [tabindex="0"]',
+        'button:not(:disabled), input, select, textarea, a[href], [tabindex="0"]',
       ) ?? []),
     ]
     ;(
@@ -74,7 +75,7 @@ export function MusicDialog({
             onClick={onClose}
             aria-label="Close dialog"
           >
-            x
+            <MusicIcon name="close" />
           </button>
         </header>
         {children}

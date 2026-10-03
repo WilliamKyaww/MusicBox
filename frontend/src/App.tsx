@@ -4,6 +4,7 @@ import {
   useEffect,
   useEffectEvent,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
@@ -35,6 +36,7 @@ import {
   renamePlaylist,
   reorderPlaylistItems,
 } from './api/playlists'
+import { searchVideos } from './api/search'
 import { getStreamUrl } from './api/streaming'
 import { createYouTubePlaylistExport } from './api/youtubePlaylists'
 import { AudioPlayer } from './components/AudioPlayer'
@@ -57,12 +59,16 @@ import { WatchPage } from './pages/WatchPage'
 import { navigate, parseRoute, paths, useHash } from './router'
 import { useScrollRestoration } from './scrollRestoration'
 import { VideoActionsContext, type VideoActions, type WatchQueue } from './videoActions'
-import { rememberExperience } from './experience'
+import { artistPath, musicPath, rememberExperience } from './experience'
 import { recordHistory } from './library'
 import { MusicWorkspace } from './music/MusicWorkspace'
 import { MusicIcon } from './music/MusicIcon'
-import { enqueueTrack, moveQueuedTrack, readSavedSession, removeQueuedTrack, shuffleTracks, toggleQueueShuffle, type PlayerSession, type PlayerTrack } from './music/queue'
-import { getMusicState, toggleLiked, updateMusicState, useMusicStore } from './music/store'
+import type { PlaySource } from './music/MusicContext'
+import { contextPath } from './music/helpers'
+import { appendAutoplay, clearQueued, enqueueTrack, moveQueuedTrack, moveQueuedTrackTo, readSavedSession, removeQueuedTrack, shuffleTracks, startContext, toggleQueueShuffle, type PlayerSession, type PlayerTrack } from './music/queue'
+import { radioCandidates } from './music/recommend'
+import { getMusicState, recordPlay, updateMusicState, useMusicStore } from './music/store'
+import { LikeButton } from './music/ui'
 import type {
   DownloadJob,
   DiscordPresenceStatus,
@@ -122,6 +128,8 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
   const [playerSession, setPlayerSession] = useState<PlayerSession | null>(() => route.name === 'watch' ? null : readSavedSession())
   const [playRequest, setPlayRequest] = useState(0)
+  const [musicFullScreen, setMusicFullScreen] = useState(false)
+  const autoplaySeed = useRef<string | null>(null)
   const music = useMusicStore()
   const isMusic = route.name === 'music'
   const [loopMode, setLoopMode] = useState<LoopMode>('off')
@@ -196,7 +204,7 @@ function App() {
       id: track.videoId,
       title: track.title,
       channel_title: track.channelTitle,
-      channel_id: '',
+      channel_id: track.channelId ?? '',
       description: '',
       thumbnail_url: getPlaylistSafeThumbnailUrl(track),
       duration_iso: '',
@@ -1100,25 +1108,89 @@ function App() {
     ? getDiscordPresenceThumbnailHref(currentTrack.videoId, getPlaylistSafeThumbnailUrl(currentTrack))
     : null
 
+  const isLyricsRoute = route.name === 'music' && route.view === 'lyrics'
   const currentVideo = currentTrack ? {
     ...toVideoSearchResult(currentTrack),
     thumbnail_url: currentTrack.thumbnailUrl || getPlaylistSafeThumbnailUrl(currentTrack),
   } : null
 
   function videoToTrack(video: VideoSearchResult): PlayerTrack {
-    return { videoId: video.id, title: video.title, channelTitle: video.channel_title, thumbnailUrl: video.thumbnail_url, sourceUrl: video.video_url, durationLabel: video.duration_label }
+    return {
+      videoId: video.id,
+      title: video.title,
+      channelTitle: video.channel_title,
+      thumbnailUrl: video.thumbnail_url,
+      sourceUrl: video.video_url,
+      durationLabel: video.duration_label,
+      ...(video.channel_id ? { channelId: video.channel_id } : {}),
+    }
   }
 
-  function handleMusicPlay(videos: VideoSearchResult[], index = 0, playlistId?: string) {
+  function handleMusicPlay(
+    videos: VideoSearchResult[],
+    index: number,
+    source: PlaySource | undefined,
+    options: { shuffle?: boolean },
+  ) {
     if (!videos.length) return
     setPlayRequest(current => current + 1)
-    setPlayerSession({ source: playlistId ? 'playlist' : 'queue', playlistId: playlistId ?? null, tracks: videos.map(videoToTrack), index: Math.max(0, Math.min(index, videos.length - 1)), shuffle: false })
+    setPlayerSession(current => startContext(
+      current,
+      videos.map(videoToTrack),
+      index,
+      source ? { kind: source.kind, id: source.id, title: source.title } : undefined,
+      // Shuffle is a mode in Spotify: it stays on for the next thing you play.
+      options.shuffle ?? current?.shuffle ?? false,
+    ))
   }
 
   function handleEnqueue(video: VideoSearchResult, next: boolean) {
     setPlayerSession(current => enqueueTrack(current, videoToTrack(video), next))
     pushToast(next ? 'Added to play next.' : 'Added to queue.')
   }
+
+  function handleEnqueueMany(videos: VideoSearchResult[]) {
+    if (!videos.length) return
+    setPlayerSession(current => videos.reduce<PlayerSession | null>((session, video) => enqueueTrack(session, videoToTrack(video), false), current))
+    pushToast(`Added ${videos.length} song${videos.length === 1 ? '' : 's'} to queue.`)
+  }
+
+  async function handleReorderPlaylist(playlistId: string, orderedItemIds: string[]) {
+    setIsMutatingPlaylist(true)
+    try {
+      const updated = await reorderPlaylistItems(playlistId, orderedItemIds)
+      startTransition(() => {
+        setPlaylists(current => current.map(entry => (entry.id === updated.id ? updated : entry)))
+        setPlaylistsErrorMessage(null)
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not reorder the playlist.'
+      startTransition(() => {
+        setPlaylistsErrorMessage(message)
+      })
+    } finally {
+      setIsMutatingPlaylist(false)
+    }
+  }
+
+  // Spotify's Autoplay: when the last song starts, line up similar songs from the
+  // same artist so the music does not stop.
+  useEffect(() => {
+    if (!isMusic || !music.autoplay || loopMode !== 'off' || !playerSession) return
+    if (playerSession.index < playerSession.tracks.length - 1) return
+    const seed = playerSession.tracks[playerSession.index]
+    if (!seed || autoplaySeed.current === seed.videoId) return
+    autoplaySeed.current = seed.videoId
+    searchVideos(seed.channelTitle || seed.title)
+      .then(response => {
+        setPlayerSession(current => {
+          if (!current || current.tracks[current.index]?.videoId !== seed.videoId) return current
+          const picks = radioCandidates(response.items, new Set(current.tracks.map(track => track.videoId)), 10)
+          return appendAutoplay(current, picks.map(videoToTrack))
+        })
+      })
+      .catch(() => { /* Autoplay is best effort; the song still finishes normally. */ })
+  }, [playerSession, isMusic, music.autoplay, loopMode])
 
   async function handleAddCurrentTrackToPlaylists(playlistIds: string[]) {
     if (!currentTrack) {
@@ -1272,15 +1344,18 @@ function App() {
       {route.name === 'music' ? <MusicWorkspace
         route={route} playlists={playlists} downloads={downloadJobs} session={playerSession} currentVideo={currentVideo}
         playlistError={playlistsErrorMessage} busy={isCreatingPlaylist || isMutatingPlaylist}
-        onPlay={handleMusicPlay} onEnqueue={handleEnqueue}
+        fullScreen={musicFullScreen} onFullScreenChange={setMusicFullScreen}
+        onPlay={handleMusicPlay} onEnqueue={handleEnqueue} onEnqueueMany={handleEnqueueMany}
         onQueueJump={index => { setPlayRequest(current => current + 1); setPlayerSession(current => current && index >= 0 && index < current.tracks.length ? { ...current, index } : current) }}
         onQueueRemove={index => setPlayerSession(current => current ? removeQueuedTrack(current, index) : current)}
         onQueueMove={(index, direction) => setPlayerSession(current => current ? moveQueuedTrack(current, index, direction) : current)}
-        onQueueClear={() => setPlayerSession(current => current ? { ...current, tracks: current.tracks.slice(0, current.index + 1), shuffle: false, orderedUpcoming: undefined } : current)}
+        onQueueMoveTo={(from, to) => setPlayerSession(current => current ? moveQueuedTrackTo(current, from, to) : current)}
+        onQueueClear={() => setPlayerSession(current => current ? clearQueued(current) : current)}
         onDownload={video => setDownloadTarget({ video })} onSave={setSaveTarget}
-        onCreatePlaylist={handleCreatePlaylist} onSelectPlaylist={setActivePlaylistId}
+        onAddToPlaylist={(video, playlistId) => handleAddToPlaylists(video, [playlistId])}
+        onCreatePlaylist={handleCreatePlaylist}
         onRenamePlaylist={handleRenamePlaylist} onDeletePlaylist={handleDeletePlaylist}
-        onRemoveItem={handleRemovePlaylistItem} onMoveItem={handleMovePlaylistItem} onToast={pushToast}
+        onRemoveItem={handleRemovePlaylistItem} onReorderPlaylist={handleReorderPlaylist} onToast={pushToast}
         downloadsPanel={renderPage('songs')} importsPanel={renderPage('import')}
         exportsPanel={<PlaylistExportPanel activePlaylist={activePlaylist} exportJobs={exportJobs} errorMessage={exportsErrorMessage} isCreatingExport={isCreatingExport} pendingRemovalIds={pendingExportRemovalIds} onCreateExport={handleCreateExport} onRemoveExport={handleRemoveExport}/>}
       /> : <>
@@ -1337,10 +1412,23 @@ function App() {
         hasMultipleTracks={Boolean(playerSession && playerSession.tracks.length > 1)}
         sleepAt={music.sleepAt}
         onSleep={() => { updateMusicState({ sleepAt: null }); pushToast('Sleep timer: playback paused.') }}
-        onTrackPlaying={() => { if (currentVideo && !getMusicState().privateSession) recordHistory(currentVideo) }}
+        onTrackPlaying={() => {
+          if (currentVideo && !getMusicState().privateSession) {
+            recordHistory(currentVideo)
+            recordPlay(currentVideo.id)
+          }
+        }}
+        onArtworkClick={isMusic ? () => setMusicFullScreen(true) : undefined}
+        trackLabel={isMusic && currentVideo ? <>
+          <a className="music-player-title" href={playerSession?.context ? contextPath(playerSession.context.kind, playerSession.context.id) : musicPath('lyrics')} title={currentVideo.title}>{currentVideo.title}</a>
+          <button type="button" className="music-link music-player-artist" onClick={() => navigate(artistPath(currentVideo.channel_id, currentVideo.id))}>{currentVideo.channel_title}</button>
+        </> : undefined}
+        trackActions={isMusic && currentVideo ? <LikeButton video={currentVideo} label="Like playing song" onToast={pushToast} /> : undefined}
         extraControls={isMusic && currentVideo ? <>
-          <button className={`music-icon-button ${music.liked.some(v => v.id === currentVideo.id) ? 'is-green' : ''}`} aria-label="Like playing song" aria-pressed={music.liked.some(v => v.id === currentVideo.id)} onClick={() => toggleLiked(currentVideo)}><MusicIcon name="heart" filled={music.liked.some(v => v.id === currentVideo.id)}/></button>
-          <button className="music-icon-button" aria-label="Open play queue" onClick={() => updateMusicState({ sidebar: music.sidebar === 'queue' ? null : 'queue' })}><MusicIcon name="queue"/></button>
+          <button type="button" className={`music-icon-button ${music.sidebar === 'now-playing' ? 'is-green has-dot' : ''}`} aria-label="Now playing view" title="Now playing view" aria-pressed={music.sidebar === 'now-playing'} onClick={() => updateMusicState({ sidebar: music.sidebar === 'now-playing' ? null : 'now-playing' })}><MusicIcon name="now-playing"/></button>
+          <button type="button" className={`music-icon-button ${isLyricsRoute ? 'is-green has-dot' : ''}`} aria-label="Lyrics" title="Lyrics" aria-pressed={isLyricsRoute} onClick={() => isLyricsRoute ? window.history.back() : navigate(musicPath('lyrics'))}><MusicIcon name="mic"/></button>
+          <button type="button" className={`music-icon-button ${music.sidebar === 'queue' ? 'is-green has-dot' : ''}`} aria-label="Queue" title="Queue" aria-pressed={music.sidebar === 'queue'} onClick={() => updateMusicState({ sidebar: music.sidebar === 'queue' ? null : 'queue' })}><MusicIcon name="queue"/></button>
+          <button type="button" className="music-icon-button music-player-fullscreen" aria-label="Full screen" title="Full screen" onClick={() => setMusicFullScreen(true)}><MusicIcon name="fullscreen"/></button>
         </> : null}
         videoId={currentTrack?.videoId ?? null}
         title={currentTrack?.title ?? null}

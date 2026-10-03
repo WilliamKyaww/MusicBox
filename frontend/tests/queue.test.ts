@@ -41,10 +41,16 @@ test('play next inserts after the current song without dropping later songs', ()
   )
   assert.equal(result.index, 1)
 })
-test('add to queue appends and creates an empty queue safely', () => {
-  assert.equal(
-    enqueueTrack(session(), track(4), false).tracks.at(-1)?.title,
-    'Song 4',
+test('add to queue joins the end of the listener queue, before the rest of the context', () => {
+  const once = enqueueTrack(session(), track(4), false)
+  const twice = enqueueTrack(once, track(5), false)
+  assert.deepEqual(
+    twice.tracks.map((t) => t.title),
+    ['Song 0', 'Song 1', 'Song 4', 'Song 5', 'Song 2', 'Song 3'],
+  )
+  assert.deepEqual(
+    twice.tracks.map((t) => t.origin),
+    [undefined, undefined, 'queue', 'queue', undefined, undefined],
   )
   assert.equal(enqueueTrack(null, track(4), false).tracks.length, 1)
 })

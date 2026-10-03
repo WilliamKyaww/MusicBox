@@ -17,8 +17,17 @@ import { PlaylistPicker } from './PlaylistPicker'
 import type { CSSProperties, ReactNode } from 'react'
 import type { Playlist } from '../types'
 import { getPlayerPrefs, updatePlayerPrefs } from '../library'
+import { MusicIcon } from '../music/MusicIcon'
+import {
+  publishPlayback,
+  registerPlaybackControls,
+  resetPlayback,
+  type LoopMode,
+  type PlaybackControls,
+} from '../music/playback'
 
-type LoopMode = 'off' | 'once' | 'all' | 'one'
+/** Spotify restarts the song instead of going back once this much has played. */
+const RESTART_THRESHOLD_SECONDS = 3
 
 type AudioPlayerProps = {
   variant?: 'music' | 'video'
@@ -26,6 +35,11 @@ type AudioPlayerProps = {
   playRequest?: number
   hasMultipleTracks?: boolean
   extraControls?: ReactNode
+  /** Music view: replaces the plain title/artist label (e.g. with links). */
+  trackLabel?: ReactNode
+  /** Music view: shown beside the track label, like Spotify's add-to-Liked button. */
+  trackActions?: ReactNode
+  onArtworkClick?: () => void
   sleepAt?: number | 'end' | null
   onSleep?: () => void
   onTrackPlaying?: () => void
@@ -58,7 +72,7 @@ type AudioPlayerProps = {
 
 export function AudioPlayer({
   variant = 'video', autoplay = true, playRequest = 0, hasMultipleTracks = false,
-  extraControls, sleepAt = null, onSleep, onTrackPlaying,
+  extraControls, trackLabel, trackActions, onArtworkClick, sleepAt = null, onSleep, onTrackPlaying,
   videoId,
   title,
   thumbnailUrl,
@@ -141,25 +155,54 @@ export function AudioPlayer({
     return () => window.clearTimeout(timer)
   }, [sleepAt, streamUrl])
 
-  const handleKey = useEffectEvent((event: KeyboardEvent) => {
-    if (variant !== 'music' || !streamUrl || event.ctrlKey || event.metaKey || document.querySelector('[role="dialog"]')) return
-    const target = event.target as HTMLElement | null
-    if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target?.tagName ?? '')) return
-    if (event.code === 'Space') { event.preventDefault(); handlePlayPause() }
-    if (event.key.toLowerCase() === 'm' && !event.altKey) setMuted(current => !current)
-    if (event.altKey && event.key === 'ArrowRight' && canGoNext) { event.preventDefault(); onNext() }
-    if (event.altKey && event.key === 'ArrowLeft' && canGoPrevious) { event.preventDefault(); onPrevious() }
-  })
+  // Lyrics, full screen and keyboard shortcuts follow and drive this player
+  // through the shared playback store instead of a second audio element.
   useEffect(() => {
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [])
+    if (!streamUrl) {
+      resetPlayback()
+      return
+    }
+    publishPlayback({ videoId, isPlaying, currentTime, duration, volume, muted, shuffle: shuffleEnabled, loopMode, canGoNext, canGoPrevious })
+  }, [streamUrl, videoId, isPlaying, currentTime, duration, volume, muted, shuffleEnabled, loopMode, canGoNext, canGoPrevious])
+  useEffect(() => resetPlayback, [])
+
+  // Other components call these from click handlers, so they read the latest
+  // props through a ref rather than effect events (which are effect-only).
+  const controlsRef = useRef<PlaybackControls | null>(null)
+  useEffect(() => {
+    controlsRef.current = {
+      toggle: handlePlayPause,
+      seek: seconds => {
+        const audio = audioRef.current
+        if (!audio || !Number.isFinite(seconds)) return
+        const time = Math.max(0, Math.min(seconds, duration || seconds))
+        audio.currentTime = time
+        setCurrentTime(time)
+      },
+      next: () => { if (canGoNext) onNext() },
+      previous: handlePrevious,
+      toggleShuffle: onToggleShuffle,
+      toggleLoop: onToggleLoop,
+      setVolume: value => { setVolume(Math.max(0, Math.min(1, value))); setMuted(false) },
+      toggleMute: () => setMuted(current => !current),
+    }
+  })
+  useEffect(() => registerPlaybackControls({
+    toggle: () => controlsRef.current?.toggle(),
+    seek: seconds => controlsRef.current?.seek(seconds),
+    next: () => controlsRef.current?.next(),
+    previous: () => controlsRef.current?.previous(),
+    toggleShuffle: () => controlsRef.current?.toggleShuffle(),
+    toggleLoop: () => controlsRef.current?.toggleLoop(),
+    setVolume: value => controlsRef.current?.setVolume(value),
+    toggleMute: () => controlsRef.current?.toggleMute(),
+  }), [])
 
   const mediaAction = useEffectEvent((action: string) => {
     if (action === 'play') void audioRef.current?.play().catch(() => {})
     if (action === 'pause') audioRef.current?.pause()
     if (action === 'nexttrack' && canGoNext) onNext()
-    if (action === 'previoustrack' && canGoPrevious) onPrevious()
+    if (action === 'previoustrack') handlePrevious()
   })
   useEffect(() => {
     if (!streamUrl || !('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return
@@ -249,6 +292,16 @@ export function AudioPlayer({
     }
   }
 
+  function handlePrevious() {
+    const audio = audioRef.current
+    if (variant === 'music' && audio && (audio.currentTime > RESTART_THRESHOLD_SECONDS || !canGoPrevious)) {
+      audio.currentTime = 0
+      setCurrentTime(0)
+      return
+    }
+    if (canGoPrevious) onPrevious()
+  }
+
   function handleTimeUpdate() {
     const audio = audioRef.current
     if (!audio) return
@@ -327,15 +380,15 @@ export function AudioPlayer({
 
       {playError ? <div className="audio-player__error" role="alert">{playError}<button onClick={() => { const audio = audioRef.current; if (audio) { audio.load(); void audio.play().catch(() => {}) } }}>Retry</button></div> : null}
 
-      <div className="audio-player__artwork" aria-hidden="true">
-        {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="" />
-        ) : (
-          <span>{(title || 'S').slice(0, 1).toUpperCase()}</span>
-        )}
-      </div>
+      {(() => {
+        const art = thumbnailUrl ? <img src={thumbnailUrl} alt="" /> : <span>{(title || 'S').slice(0, 1).toUpperCase()}</span>
+        return onArtworkClick
+          ? <button type="button" className="audio-player__artwork audio-player__artwork--button" onClick={onArtworkClick} aria-label="Open full screen player">{art}</button>
+          : <div className="audio-player__artwork" aria-hidden="true">{art}</div>
+      })()}
 
-      {variant === 'music' ? <div className="audio-player__track-label"><strong>{title}</strong><span>{channelTitle}</span>{buffering && isPlaying ? <small role="status">Buffering...</small> : null}</div> : null}
+      {variant === 'music' ? <div className="audio-player__track-label">{trackLabel ?? <><strong>{title}</strong><span>{channelTitle}</span></>}{buffering && isPlaying ? <small role="status">Buffering...</small> : null}</div> : null}
+      {variant === 'music' && trackActions ? <div className="audio-player__track-actions">{trackActions}</div> : null}
 
       <div className="audio-player__controls">
         {isPlaylistPlayback || variant === 'music' ? (
@@ -357,8 +410,8 @@ export function AudioPlayer({
           <button
             type="button"
             className="audio-player__control-button"
-            onClick={onPrevious}
-            disabled={!canGoPrevious}
+            onClick={handlePrevious}
+            disabled={variant !== 'music' && !canGoPrevious}
             aria-label="Previous track"
             title="Previous track"
           >
@@ -440,7 +493,7 @@ export function AudioPlayer({
       </div>
 
       <div className="audio-player__volume">
-        <button className="audio-player__control-button" aria-label={muted ? 'Unmute' : 'Mute'} aria-pressed={muted} onClick={() => setMuted(!muted)}><VolumeIcon className="audio-player__volume-icon" /></button>
+        <button className="audio-player__control-button" aria-label={muted ? 'Unmute' : 'Mute'} aria-pressed={muted} onClick={() => setMuted(!muted)}>{variant === 'music' ? <MusicIcon name={muted || volume === 0 ? 'volume-off' : volume < 0.5 ? 'volume-low' : 'volume'} /> : <VolumeIcon className="audio-player__volume-icon" />}</button>
         <input
           type="range"
           className="audio-player__volume-slider"
@@ -470,8 +523,9 @@ export function AudioPlayer({
         className="audio-player__close"
         onClick={onClose}
         aria-label="Close player"
+        title="Close player"
       >
-        x
+        {variant === 'music' ? <MusicIcon name="close" /> : 'x'}
       </button>
     </div>,
     document.body,
