@@ -15,7 +15,7 @@ import {
 } from '../store'
 import { ArtistLink, TrackList } from '../TrackList'
 import { hueStyle } from '../helpers'
-import { useIsPlaying } from '../hooks'
+import { useIsPlaying, useStickyHeader } from '../hooks'
 import { Artwork, Card, PlayButton } from '../ui'
 
 const CATEGORIES: [string, string, number][] = [
@@ -45,13 +45,14 @@ function normalize(text: string) {
 
 export function SearchView({ route }: { route: MusicRoute }) {
   const store = useMusicStore()
+  useStickyHeader({ title: route.query ? `Results for "${route.query}"` : 'Search', hue: null, threshold: 72 })
   if (!route.query)
     return (
       <div className="music-page music-page--padded">
         {store.recentSearches.length ? (
           <section className="music-section">
             <div className="music-section-heading">
-              <h2>Recent searches</h2>
+              <h2>Recent Searches</h2>
               <button
                 type="button"
                 className="music-text-button"
@@ -80,7 +81,7 @@ export function SearchView({ route }: { route: MusicRoute }) {
             </div>
           </section>
         ) : null}
-        <h2 className="music-browse-title">Browse all</h2>
+        <h2 className="music-browse-title">Browse All</h2>
         <div className="music-browse">
           {CATEGORIES.map(([name, query, hue]) => (
             <button
@@ -155,7 +156,7 @@ function Results({ query }: { query: string }) {
       ) : null}
       {search.data && !songs.length && !channels.length ? (
         <div className="music-empty">
-          <h3>No results found for "{query}"</h3>
+          <h3>No Results Found for "{query}"</h3>
           <p>Please make sure your words are spelled correctly, or use fewer or different keywords.</p>
         </div>
       ) : null}
@@ -164,7 +165,7 @@ function Results({ query }: { query: string }) {
         <>
           <div className="music-search-top">
             <section>
-              <h2>Top result</h2>
+              <h2>Top Result</h2>
               {topArtist ? (
                 <TopArtist channel={topArtist} />
               ) : (

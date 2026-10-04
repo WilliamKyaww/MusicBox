@@ -217,7 +217,7 @@ test('date added reads like Spotify', () => {
   assert.equal(formatAdded('2026-10-03T08:00:00Z', now), 'Today')
   assert.equal(formatAdded('2026-10-01T08:00:00Z', now), '2 days ago')
   assert.equal(formatAdded('2026-09-18T08:00:00Z', now), '2 weeks ago')
-  assert.equal(formatAdded('2026-03-05T08:00:00Z', now), 'Mar 5, 2026')
+  assert.equal(formatAdded('2026-03-05T08:00:00Z', now), '5 Mar 2026')
   assert.equal(formatAdded('not a date', now), '')
 })
 

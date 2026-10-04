@@ -46,8 +46,12 @@ try {
   await cp(path.join(buildDir, 'backend/musicbox-backend'), path.join(resources, 'backend'), { recursive: true })
   const builderCli = require.resolve('electron-builder/cli.js')
   const args = [builderCli, process.argv.includes('--dir') ? '--dir' : '--win', '--x64']
+  // Antivirus or sync tools can lock dist\win-unpacked.tmp (EPERM on rename); building
+  // outside the synced Documents folder avoids it.
+  const output = process.env.MUSICBOX_DIST_DIR ? path.resolve(process.env.MUSICBOX_DIST_DIR) : path.join(desktopDir, 'dist')
+  if (process.env.MUSICBOX_DIST_DIR) args.push(`-c.directories.output=${output}`)
   await run(process.execPath, args, { cwd: desktopDir })
-  console.log(`Desktop output: ${path.join(desktopDir, 'dist')}`)
+  console.log(`Desktop output: ${output}`)
 } catch (error) {
   console.error(error.message)
   process.exitCode = 1

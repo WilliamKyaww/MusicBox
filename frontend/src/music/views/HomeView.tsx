@@ -6,6 +6,7 @@ import { navigate } from '../../router'
 import type { VideoSearchResult } from '../../types'
 import { cacheKeys, useCachedResource } from '../../useCachedResource'
 import { contextPath, playlistVideo, sortedItems } from '../helpers'
+import { useStickyHeader } from '../hooks'
 import { useMusic, type PlaySource } from '../MusicContext'
 import { getPlaybackControls, usePlayback } from '../playback'
 import {
@@ -41,6 +42,7 @@ export function HomeView() {
   const trending = useCachedResource(cacheKeys.trending(), fetchTrending)
   const isPlaying = usePlayback((state) => state.isPlaying)
   const playingContext = music.session?.context
+  useStickyHeader({ title: greeting(), hue: null, threshold: 72 })
 
   const artists = topArtists(history, store.liked, store.playCounts, 12)
   const mixes = dailyMixes(artists)
@@ -197,7 +199,7 @@ export function HomeView() {
       ) : null}
 
       {show('all') && (mixes.length || repeat.length >= 3) ? (
-        <Shelf title="Made for you" subtitle="From your listening on this device">
+        <Shelf title="Made for You" subtitle="From your listening on this device">
           {repeat.length >= 3 ? (
             <Card
               title="On Repeat"
@@ -221,7 +223,7 @@ export function HomeView() {
       ) : null}
 
       {show('all') && contexts.length ? (
-        <Shelf title="Jump back in">
+        <Shelf title="Jump Back In">
           {contexts.slice(0, 12).map((context) => (
             <Card
               key={`${context.kind}:${context.id}`}
@@ -246,7 +248,7 @@ export function HomeView() {
       ) : null}
 
       {show('all') && history.length ? (
-        <Shelf title="Recently played" href={musicPath('recent')}>
+        <Shelf title="Recently Played" href={musicPath('recent')}>
           {history.slice(0, 12).map((entry, index, all) => (
             <SongCard
               key={entry.video.id}
@@ -264,7 +266,7 @@ export function HomeView() {
       ) : null}
 
       {show('artists') && (artists.length || subscriptions.length) ? (
-        <Shelf title={artists.length ? 'Your top artists' : 'Artists you follow'} href={musicPath('artists')}>
+        <Shelf title={artists.length ? 'Your Top Artists' : 'Artists You Follow'} href={musicPath('artists')}>
           {(artists.length
             ? artists.map((artist) => ({
                 key: artist.name,
@@ -292,7 +294,7 @@ export function HomeView() {
       ) : null}
 
       {show('playlists') && music.playlists.length ? (
-        <Shelf title="Your playlists" href={musicPath('playlists')}>
+        <Shelf title="Your Playlists" href={musicPath('playlists')}>
           {music.playlists.map((playlist) => {
             const tracks = sortedItems(playlist).map(playlistVideo)
             return (
@@ -339,12 +341,12 @@ export function HomeView() {
         trending.isLoading ? (
           <section className="music-shelf">
             <div className="music-section-heading">
-              <h2>Popular right now</h2>
+              <h2>Popular Right Now</h2>
             </div>
             <Skeleton />
           </section>
         ) : trending.data?.items.length ? (
-          <Shelf title="Popular right now" subtitle="Trending on YouTube">
+          <Shelf title="Popular Right Now" subtitle="Trending on YouTube">
             {trending.data.items.slice(0, 12).map((video, index, all) => (
               <SongCard
                 key={video.id}

@@ -23,7 +23,7 @@ const FILTER_GROUPS: {
   options: { value: string; label: string }[]
 }[] = [
   {
-    title: 'Upload date',
+    title: 'Upload Date',
     field: 'uploadDate',
     options: [
       { value: 'any', label: 'Any time' },
@@ -45,7 +45,7 @@ const FILTER_GROUPS: {
     ],
   },
   {
-    title: 'Sort by',
+    title: 'Sort By',
     field: 'order',
     options: [
       { value: 'relevance', label: 'Relevance' },
@@ -71,7 +71,7 @@ function ChannelResult({ channel }: { channel: ChannelSearchResult }) {
           {joinMeta(
             channel.handle,
             formatSubscribers(channel.subscriber_count),
-            channel.video_count !== null ? `${channel.video_count.toLocaleString('en')} videos` : null,
+            channel.video_count !== null ? `${channel.video_count.toLocaleString('en-GB')} videos` : null,
           )}
         </p>
         {channel.description ? (
@@ -143,7 +143,7 @@ export function SearchPage({ query, filters }: SearchPageProps) {
       ) : null}
 
       {first.error && !first.data ? (
-        <StatusPanel tone="error" title="Search could not complete" body={first.error} />
+        <StatusPanel tone="error" title="Search Couldn't Complete" body={first.error} />
       ) : null}
 
       {first.isLoading && !first.data ? (
@@ -162,7 +162,7 @@ export function SearchPage({ query, filters }: SearchPageProps) {
       ) : null}
 
       {first.data && videos.length === 0 && channels.length === 0 ? (
-        <StatusPanel title="No results found" body="Try different keywords or remove search filters." />
+        <StatusPanel title="No Results Found" body="Try different keywords or remove search filters." />
       ) : null}
 
       <div className="search-page__results">

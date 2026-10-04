@@ -6,12 +6,15 @@ import {
   PencilIcon,
   PlayIcon,
   RepeatIcon,
+  SearchIcon,
   TrashIcon,
   VideoIcon,
 } from './Icons'
 import { ModalDialog } from './ModalDialog'
+import { PageHeader } from './PageHeader'
 import { PlaylistPicker } from './PlaylistPicker'
 import { formatSectionLabel } from '../downloadSections'
+import { formatFileSize, formatRelativeTime, joinMeta } from '../format'
 import {
   getDownloadFileHref,
   getDownloadThumbnailHref,
@@ -36,28 +39,38 @@ type DownloadQueuePanelProps = {
   onAddToPlaylists: (job: DownloadJob, playlistIds: string[]) => void
   onPlay?: (job: DownloadJob) => void
   onWatch?: (job: DownloadJob) => void
+  /** Inside the Music experience the page supplies its own heading. */
+  embedded?: boolean
 }
 
-function formatFileSize(fileSizeBytes: number | null) {
-  if (!fileSizeBytes || fileSizeBytes <= 0) {
-    return null
-  }
+type Filter = 'all' | 'audio' | 'video' | 'active' | 'failed'
+const FILTERS: [Filter, string][] = [
+  ['all', 'All'],
+  ['audio', 'Audio'],
+  ['video', 'Video'],
+  ['active', 'In progress'],
+  ['failed', 'Failed'],
+]
+const PAGE_SIZE = 20
 
-  const units = ['B', 'KB', 'MB', 'GB']
-  let size = fileSizeBytes
-  let unitIndex = 0
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-
-  const precision = size >= 10 || unitIndex === 0 ? 0 : 1
-  return `${size.toFixed(precision)} ${units[unitIndex]}`
+function isActive(job: DownloadJob) {
+  return job.status === 'queued' || job.status === 'downloading' || job.status === 'converting'
 }
 
-const INITIAL_VISIBLE = 5
-const LOAD_MORE_COUNT = 10
+function matchesFilter(job: DownloadJob, filter: Filter) {
+  if (filter === 'audio') return job.media_kind === 'audio'
+  if (filter === 'video') return job.media_kind === 'video'
+  if (filter === 'active') return isActive(job)
+  if (filter === 'failed') return job.status === 'failed'
+  return true
+}
+
+function statusText(job: DownloadJob) {
+  if (job.status === 'queued') return 'Waiting to start'
+  if (job.status === 'converting') return 'Converting'
+  if (job.status === 'downloading') return `Downloading · ${job.progress_percent}%`
+  return null
+}
 
 export function DownloadQueuePanel({
   runtime,
@@ -76,69 +89,77 @@ export function DownloadQueuePanel({
   onAddToPlaylists,
   onPlay,
   onWatch,
+  embedded = false,
 }: DownloadQueuePanelProps) {
-  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<Filter>('all')
   const [renameTarget, setRenameTarget] = useState<DownloadJob | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
-  const normalizedQuery = searchQuery.trim().toLowerCase()
-  const filteredJobs = normalizedQuery
-    ? jobs.filter((job) =>
-        [job.title, job.channel_title, job.status]
-          .filter(Boolean)
-          .some((value) => value.toLowerCase().includes(normalizedQuery)),
-      )
-    : jobs
-  const visibleJobs = filteredJobs.slice(0, visibleCount)
-  const hasMore = filteredJobs.length > visibleCount
-  const canShowLess = visibleCount > INITIAL_VISIBLE
-
-  function handleSearchChange(value: string) {
-    setSearchQuery(value)
-    setVisibleCount(INITIAL_VISIBLE)
+  const needle = query.trim().toLowerCase()
+  const filtered = jobs.filter(
+    (job) =>
+      matchesFilter(job, filter) &&
+      (!needle ||
+        [job.title, job.channel_title].some((value) => value?.toLowerCase().includes(needle))),
+  )
+  const visible = filtered.slice(0, visibleCount)
+  const counts = {
+    ready: jobs.filter((job) => job.status === 'completed').length,
+    active: jobs.filter(isActive).length,
   }
 
-  function openRenameModal(job: DownloadJob) {
-    setRenameTarget(job)
-    setRenameDraft(job.title)
-  }
-
-  function handleRenameConfirm() {
-    if (!renameTarget || !renameDraft.trim()) {
-      return
-    }
-
-    onRenameJob(renameTarget, renameDraft)
-    setRenameTarget(null)
-    setRenameDraft('')
-  }
-
-  return (
-    <section className="downloads-panel">
-      <div className="downloads-panel__header">
-        <h2>Saved Songs</h2>
-        {filteredJobs.length > 0 ? (
-          <span className="downloads-panel__count">
-            {visibleJobs.length} of {filteredJobs.length}
-          </span>
-        ) : null}
-      </div>
-
-      <label className="library-search" htmlFor="saved-songs-search">
-        <span className="library-search__label">Search saved songs</span>
+  const toolbar = (
+    <>
+      <label className="toolbar-search">
+        <SearchIcon className="yt-icon" />
         <input
-          id="saved-songs-search"
-          className="library-search__input"
           type="search"
-          value={searchQuery}
-          onChange={(event) => handleSearchChange(event.target.value)}
-          placeholder="Filter by title, channel, or status"
+          aria-label="Search downloads"
+          placeholder="Search downloads"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setVisibleCount(PAGE_SIZE)
+          }}
         />
       </label>
+      <div className="chip-row" role="group" aria-label="Filter downloads">
+        {FILTERS.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={`yt-chip ${filter === value ? 'yt-chip--active' : ''}`}
+            aria-pressed={filter === value}
+            onClick={() => {
+              setFilter(value)
+              setVisibleCount(PAGE_SIZE)
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </>
+  )
+
+  const subtitle = jobs.length
+    ? joinMeta(`${counts.ready} saved`, counts.active ? `${counts.active} in progress` : null)
+    : 'Songs and videos you download are kept on this computer.'
+
+  return (
+    <section className={`downloads ${embedded ? 'downloads--embedded' : ''}`} aria-label="Downloads">
+      {embedded ? (
+        <div className="downloads__toolbar">{toolbar}</div>
+      ) : (
+        <PageHeader title="Downloads" subtitle={subtitle}>
+          {toolbar}
+        </PageHeader>
+      )}
 
       {runtime && !runtime.available ? (
-        <div className="downloads-runtime downloads-runtime--warning">
-          <h3>Setup required</h3>
+        <div className="inline-alert inline-alert--warning">
+          <strong>Downloads need setting up</strong>
           <ul>
             {runtime.missing_dependencies.map((message) => (
               <li key={message}>{message}</li>
@@ -146,277 +167,184 @@ export function DownloadQueuePanel({
           </ul>
         </div>
       ) : null}
-
       {errorMessage ? (
-        <div className="downloads-runtime downloads-runtime--error">
-          <h3>Queue refresh failed</h3>
-          <p>{errorMessage}</p>
-        </div>
+        <p className="inline-alert inline-alert--error">Couldn't refresh downloads: {errorMessage}</p>
       ) : null}
 
       {jobs.length === 0 ? (
-        <div className="downloads-empty">
-          <p>No saved songs yet</p>
+        <div className="empty-state">
+          <DownloadIcon className="yt-icon" />
+          <h2>No Downloads Yet</h2>
+          <p>Choose Download from any video's menu to keep it as an MP3 or video file.</p>
         </div>
-      ) : filteredJobs.length === 0 ? (
-        <div className="downloads-empty">
-          <p>No saved songs match your search</p>
+      ) : filtered.length === 0 ? (
+        <div className="empty-state empty-state--compact">
+          <SearchIcon className="yt-icon" />
+          <p>No downloads match.</p>
         </div>
       ) : (
-        <>
-          <div className="downloads-list">
-            {visibleJobs.map((job) => {
-              const thumbnailSrc = job.thumbnail_path
-                ? getDownloadThumbnailHref(job.id)
-                : job.thumbnail_url
-              const thumbnailDownloadHref = job.thumbnail_path
-                ? getDownloadThumbnailHref(job.id)
-                : getVideoThumbnailHref(job.video_id, job.title, job.thumbnail_url)
-              const isVideoJob = job.media_kind === 'video'
-              const sectionLabel = formatSectionLabel(
-                job.section_start_seconds,
-                job.section_end_seconds,
-              )
-
-              return (
-              <article className="download-job download-job--compact" key={job.id}>
-                <div className="download-job__artwork" aria-hidden="true">
-                  {thumbnailSrc ? (
-                    <img src={thumbnailSrc} alt="" loading="lazy" />
-                  ) : (
-                    <span>{job.title.slice(0, 1).toUpperCase()}</span>
-                  )}
-                </div>
-
-                <div className="download-job__content">
-                  <div className="download-job__meta">
-                  <div>
-                    <p className="download-job__status">{job.status}</p>
-                    <h3>{job.title}</h3>
-                    <p className="download-job__channel">
-                      {job.channel_title || 'Unknown channel'}
-                    </p>
-                    <p className="download-job__tags">
-                      <span
-                        className={`download-job__tag download-job__tag--${job.media_kind}`}
-                      >
-                        {isVideoJob
-                          ? `MP4${job.video_quality === 'best' ? '' : ` ${job.video_quality}p`}`
-                          : 'MP3'}
-                      </span>
-                      {sectionLabel !== 'Whole video' ? (
-                        <span className="download-job__tag">{sectionLabel}</span>
-                      ) : null}
-                    </p>
-                  </div>
-                  <span className={`download-job__pill download-job__pill--${job.status}`}>
-                    {job.status === 'completed'
-                      ? 'Ready'
-                      : job.status === 'failed'
-                        ? 'Failed'
-                      : `${job.progress_percent}%`}
+        <ul className="download-list">
+          {visible.map((job) => {
+            const thumbnail = job.thumbnail_path ? getDownloadThumbnailHref(job.id) : job.thumbnail_url
+            const thumbnailHref = job.thumbnail_path
+              ? getDownloadThumbnailHref(job.id)
+              : getVideoThumbnailHref(job.video_id, job.title, job.thumbnail_url)
+            const isVideo = job.media_kind === 'video'
+            const section = formatSectionLabel(job.section_start_seconds, job.section_end_seconds)
+            const ready = job.status === 'completed' && job.download_path
+            const pending = pendingRemovalIds.includes(job.id)
+            const progress = statusText(job)
+            return (
+              <li key={job.id} className={`download-row download-row--${job.status}`}>
+                <div className="download-row__thumb">
+                  {thumbnail ? <img src={thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" /> : null}
+                  <span className={`download-row__badge download-row__badge--${job.media_kind}`}>
+                    {isVideo ? `MP4${job.video_quality === 'best' ? '' : ` ${job.video_quality}p`}` : 'MP3'}
                   </span>
                 </div>
-
-                  {job.status !== 'completed' ? (
-                    <div className="download-job__progress">
-                      <div
-                        className={`download-job__bar download-job__bar--${job.status}`}
-                        style={{ width: `${job.progress_percent}%` }}
-                      />
-                    </div>
-                  ) : null}
-
-                  <p className="download-job__detail">
-                    {job.error_message || job.status_detail || 'Working...'}
+                <div className="download-row__text">
+                  <p className="download-row__title" title={job.title}>
+                    {job.title}
                   </p>
-
-                  <div className="download-job__footer">
-                    <span>
-                      {job.file_size_bytes ? formatFileSize(job.file_size_bytes) : 'Pending file'}
-                    </span>
-                    <div className="download-job__action-group">
-                      {job.status === 'completed' &&
-                      job.download_path &&
-                      isVideoJob &&
-                      onWatch ? (
-                        <button
-                          type="button"
-                          className="download-job__icon-button"
-                          onClick={() => onWatch(job)}
-                          title="Watch in app"
-                          aria-label="Watch in app"
-                        >
-                          <VideoIcon className="action-icon" />
-                        </button>
-                      ) : null}
-
-                      {job.status === 'completed' &&
-                      job.download_path &&
-                      !isVideoJob &&
-                      onPlay ? (
-                        <button
-                          type="button"
-                          className="download-job__icon-button"
-                          onClick={() => onPlay(job)}
-                          title="Play in app"
-                          aria-label="Play in app"
-                        >
-                          <PlayIcon className="action-icon" />
-                        </button>
-                      ) : null}
-
-                      <a
-                        className="download-job__icon-button"
-                        href={thumbnailDownloadHref}
-                        download
-                        title="Download thumbnail"
-                        aria-label="Download thumbnail"
-                      >
-                        <ImageIcon className="action-icon" />
-                      </a>
-
-                      {job.status === 'completed' ? (
-                        <PlaylistPicker
-                          playlists={playlists}
-                          activePlaylistId={activePlaylistId}
-                          isSubmitting={pendingPlaylistVideoId === job.video_id}
-                          buttonClassName="download-job__icon-button download-job__icon-button--playlist"
-                          title="Add saved song to playlist"
-                          onSubmit={(playlistIds) => onAddToPlaylists(job, playlistIds)}
-                        />
-                      ) : null}
-
-                      {job.status !== 'downloading' && job.status !== 'queued' && job.status !== 'converting' ? (
-                        <button
-                          type="button"
-                          className="download-job__icon-button download-job__icon-button--edit"
-                          onClick={() => openRenameModal(job)}
-                          disabled={pendingRenameIds.includes(job.id)}
-                          title="Rename saved song"
-                          aria-label="Rename saved song"
-                        >
-                          <PencilIcon className="action-icon" />
-                        </button>
-                      ) : null}
-
-                      {job.status === 'completed' && job.download_path ? (
-                        <a
-                          className="download-job__icon-button"
-                          href={getDownloadFileHref(job.id)}
-                          download={job.file_name ?? undefined}
-                          title={isVideoJob ? 'Save video file' : 'Save MP3'}
-                          aria-label={isVideoJob ? 'Save video file' : 'Save MP3'}
-                        >
-                          <DownloadIcon className="action-icon" />
-                        </a>
-                      ) : null}
-
-                      {job.status === 'completed' ? (
-                        <button
-                          type="button"
-                          className="download-job__icon-button download-job__icon-button--danger"
-                          onClick={() => onRemoveJob(job, true)}
-                          disabled={pendingRemovalIds.includes(job.id)}
-                          title={isVideoJob ? 'Delete saved video' : 'Delete saved MP3'}
-                          aria-label={
-                            isVideoJob ? 'Delete saved video' : 'Delete saved MP3'
-                          }
-                        >
-                          <TrashIcon className="action-icon" />
-                        </button>
-                      ) : null}
-
-                      {job.status === 'queued' ||
-                      job.status === 'downloading' ||
-                      job.status === 'converting' ? (
-                        <button
-                          type="button"
-                          className="download-job__cancel"
-                          onClick={() => onCancelJob(job)}
-                          disabled={pendingRemovalIds.includes(job.id)}
-                          title="Cancel download and delete partial files"
-                        >
-                          <CloseIcon className="action-icon" />
-                          {pendingRemovalIds.includes(job.id) ? 'Cancelling…' : 'Cancel'}
-                        </button>
-                      ) : null}
-
-                      {job.status === 'failed' ? (
-                        <button
-                          type="button"
-                          className="download-job__icon-button"
-                          onClick={() => onRedownload(job)}
-                          disabled={pendingRedownloadIds.includes(job.id)}
-                          title="Redownload song"
-                          aria-label="Redownload song"
-                        >
-                          <RepeatIcon className="action-icon" />
-                        </button>
-                      ) : null}
-
-                      {job.status === 'failed' ? (
-                        <button
-                          type="button"
-                          className="download-job__icon-button download-job__icon-button--danger"
-                          onClick={() => onRemoveJob(job, false)}
-                          disabled={pendingRemovalIds.includes(job.id)}
-                          title="Remove failed entry"
-                          aria-label="Remove failed entry"
-                        >
-                          <TrashIcon className="action-icon" />
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
+                  <p className="download-row__meta">
+                    {joinMeta(
+                      job.channel_title || 'Unknown channel',
+                      formatFileSize(job.file_size_bytes),
+                      section !== 'Whole video' ? section : null,
+                      job.status === 'completed' ? formatRelativeTime(job.updated_at) : null,
+                    )}
+                  </p>
+                  {progress ? (
+                    <>
+                      <p className="download-row__status">{progress}</p>
+                      <div className="download-row__progress" aria-hidden="true">
+                        <span style={{ width: `${job.progress_percent}%` }} />
+                      </div>
+                    </>
+                  ) : null}
+                  {job.status === 'failed' ? (
+                    <p className="download-row__status download-row__status--error">
+                      {job.error_message || 'The download failed.'}
+                    </p>
+                  ) : null}
                 </div>
-              </article>
-            )})}
-          </div>
-
-          {hasMore || canShowLess ? (
-            <div className="downloads-panel__pager">
-              {hasMore ? (
-                <button
-                  type="button"
-                  className="downloads-panel__show-more"
-                  onClick={() => setVisibleCount((prev) => prev + LOAD_MORE_COUNT)}
-                >
-                  Show more ({filteredJobs.length - visibleCount} remaining)
-                </button>
-              ) : null}
-              {canShowLess ? (
-                <button
-                  type="button"
-                  className="downloads-panel__show-more downloads-panel__show-more--muted"
-                  onClick={() => setVisibleCount(INITIAL_VISIBLE)}
-                >
-                  Collapse to latest 5
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </>
+                <div className="download-row__actions">
+                  {ready && isVideo && onWatch ? (
+                    <button type="button" className="yt-icon-button" onClick={() => onWatch(job)} title="Watch" aria-label="Watch in app">
+                      <VideoIcon className="yt-icon" />
+                    </button>
+                  ) : null}
+                  {ready && !isVideo && onPlay ? (
+                    <button type="button" className="yt-icon-button" onClick={() => onPlay(job)} title="Play" aria-label="Play in app">
+                      <PlayIcon className="yt-icon" />
+                    </button>
+                  ) : null}
+                  {job.status === 'completed' ? (
+                    <PlaylistPicker
+                      playlists={playlists}
+                      activePlaylistId={activePlaylistId}
+                      isSubmitting={pendingPlaylistVideoId === job.video_id}
+                      buttonClassName="yt-icon-button"
+                      title="Save to playlist"
+                      onSubmit={(playlistIds) => onAddToPlaylists(job, playlistIds)}
+                    />
+                  ) : null}
+                  {ready ? (
+                    <a
+                      className="yt-icon-button"
+                      href={getDownloadFileHref(job.id)}
+                      download={job.file_name ?? undefined}
+                      title={isVideo ? 'Save video file' : 'Save MP3'}
+                      aria-label={isVideo ? 'Save video file' : 'Save MP3'}
+                    >
+                      <DownloadIcon className="yt-icon" />
+                    </a>
+                  ) : null}
+                  <a className="yt-icon-button" href={thumbnailHref} download title="Save thumbnail" aria-label="Download thumbnail">
+                    <ImageIcon className="yt-icon" />
+                  </a>
+                  {!isActive(job) ? (
+                    <button
+                      type="button"
+                      className="yt-icon-button"
+                      onClick={() => {
+                        setRenameTarget(job)
+                        setRenameDraft(job.title)
+                      }}
+                      disabled={pendingRenameIds.includes(job.id)}
+                      title="Rename"
+                      aria-label="Rename saved song"
+                    >
+                      <PencilIcon className="yt-icon" />
+                    </button>
+                  ) : null}
+                  {job.status === 'failed' ? (
+                    <button
+                      type="button"
+                      className="yt-icon-button"
+                      onClick={() => onRedownload(job)}
+                      disabled={pendingRedownloadIds.includes(job.id)}
+                      title="Try again"
+                      aria-label="Redownload song"
+                    >
+                      <RepeatIcon className="yt-icon" />
+                    </button>
+                  ) : null}
+                  {isActive(job) ? (
+                    <button type="button" className="yt-pill yt-pill--danger" onClick={() => onCancelJob(job)} disabled={pending} title="Cancel and delete partial files">
+                      <CloseIcon className="yt-icon" />
+                      {pending ? 'Cancelling…' : 'Cancel'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="yt-icon-button"
+                      onClick={() => onRemoveJob(job, job.status === 'completed')}
+                      disabled={pending}
+                      title={job.status === 'completed' ? 'Delete' : 'Remove'}
+                      aria-label={
+                        job.status === 'completed'
+                          ? isVideo
+                            ? 'Delete saved video'
+                            : 'Delete saved MP3'
+                          : 'Remove failed entry'
+                      }
+                    >
+                      <TrashIcon className="yt-icon" />
+                    </button>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       )}
+
+      {filtered.length > visibleCount ? (
+        <button type="button" className="yt-pill show-more" onClick={() => setVisibleCount(visibleCount + PAGE_SIZE)}>
+          Show more ({filtered.length - visibleCount})
+        </button>
+      ) : null}
 
       {renameTarget ? (
         <ModalDialog
-          title="Rename saved song"
+          title="Rename Download"
           description=""
-          confirmLabel="Save changes"
+          confirmLabel="Save"
           isBusy={pendingRenameIds.includes(renameTarget.id)}
-          onConfirm={handleRenameConfirm}
-          onCancel={() => {
-            if (pendingRenameIds.includes(renameTarget.id)) {
-              return
-            }
+          onConfirm={() => {
+            if (!renameDraft.trim()) return
+            onRenameJob(renameTarget, renameDraft)
             setRenameTarget(null)
-            setRenameDraft('')
+          }}
+          onCancel={() => {
+            if (!pendingRenameIds.includes(renameTarget.id)) setRenameTarget(null)
           }}
         >
           <input
             className="modal-dialog__input"
             type="text"
+            aria-label="Name"
             value={renameDraft}
             onChange={(event) => setRenameDraft(event.target.value)}
             autoFocus

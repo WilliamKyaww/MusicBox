@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useLibrary } from '../library'
 import { paths, type Route } from '../router'
 import { ChannelAvatar } from '../components/ChannelAvatar'
+import { ResizeHandle } from '../components/ResizeHandle'
+import { PANELS, resetPanelSize, setPanelSize, usePanelSize } from '../panelSizes'
 import {
   DownloadIcon,
   HistoryIcon,
@@ -9,6 +11,7 @@ import {
   LibraryIcon,
   ListIcon,
   MenuIcon,
+  SettingsIcon,
   SubscriptionsIcon,
 } from '../components/Icons'
 import { Logo } from './TopBar'
@@ -66,16 +69,23 @@ function SidebarContent({ route, mini }: { route: Route; mini: boolean }) {
     { href: paths.playlists(), label: 'Playlists', icon: <ListIcon className="yt-icon" />, active: route.name === 'playlists' },
     {
       href: paths.import(),
-      label: 'Playlist download',
+      label: 'Playlist Download',
       icon: <LibraryIcon className="yt-icon" />,
       active: route.name === 'import',
     },
   ]
 
+  const settings: NavItem = {
+    href: paths.settings(),
+    label: 'Settings',
+    icon: <SettingsIcon className="yt-icon" />,
+    active: route.name === 'settings',
+  }
+
   if (mini) {
     return (
       <nav className="yt-nav yt-nav--mini" aria-label="Main">
-        {[...primary, ...library.slice(0, 3)].map((item) => (
+        {[...primary, ...library.slice(0, 3), settings].map((item) => (
           <NavLink key={item.href} item={item} mini />
         ))}
       </nav>
@@ -123,12 +133,16 @@ function SidebarContent({ route, mini }: { route: Route; mini: boolean }) {
           ) : null}
         </div>
       ) : null}
+      <div className="yt-nav__section">
+        <NavLink item={settings} mini={false} />
+      </div>
       <p className="yt-nav__footer">MusicBox · personal YouTube client</p>
     </nav>
   )
 }
 
 export function Sidebar({ mode, drawerOpen, onCloseDrawer, route }: SidebarProps) {
+  const width = usePanelSize('yt-sidebar')
   useEffect(() => {
     if (!drawerOpen) return
     function handleKeyDown(event: KeyboardEvent) {
@@ -144,6 +158,18 @@ export function Sidebar({ mode, drawerOpen, onCloseDrawer, route }: SidebarProps
         <aside className={`yt-sidebar yt-sidebar--${mode}`}>
           <SidebarContent route={route} mini={mode === 'mini'} />
         </aside>
+      ) : null}
+      {mode === 'full' ? (
+        <ResizeHandle
+          className="yt-sidebar__resize"
+          label="Resize guide"
+          value={width}
+          min={PANELS['yt-sidebar'].min}
+          max={PANELS['yt-sidebar'].max}
+          side="start"
+          onResize={(next) => setPanelSize('yt-sidebar', next)}
+          onReset={() => resetPanelSize('yt-sidebar')}
+        />
       ) : null}
 
       {drawerOpen ? (

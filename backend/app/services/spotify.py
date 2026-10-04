@@ -34,7 +34,7 @@ async def _get_client_credentials_token(client: httpx.AsyncClient) -> str:
 
     if not settings.spotify_client_id or not settings.spotify_client_secret:
         raise SpotifyConfigError(
-            "Spotify preview is not configured yet. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to backend/.env."
+            "Spotify preview needs a Spotify client ID and secret. Add them in Settings."
         )
 
     basic_auth = base64.b64encode(

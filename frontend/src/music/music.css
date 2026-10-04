@@ -1,40 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&display=swap');
 
-/* ---------- Experience switch (also used by the video top bar) ---------- */
-.experience-switch {
-  display: flex;
-  flex-shrink: 0;
-  padding: 3px;
-  border: 1px solid var(--surface-border);
-  border-radius: 24px;
-  background: var(--panel-inset);
-}
-.experience-switch button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  border: 0;
-  border-radius: 20px;
-  padding: 8px 12px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.experience-switch button[aria-pressed='true'] {
-  background: var(--text-strong);
-  color: var(--bg);
-}
-.experience-switch svg {
-  width: 17px;
-  height: 17px;
-}
-.experience-switch button:hover {
-  opacity: 0.8;
-}
-
 /* ---------- Tokens ---------- */
 :root[data-experience='music'] {
   --bg: #000;
@@ -67,6 +32,18 @@
   --music-faint: #7a7a7a;
   --music-player-height: 80px;
   --music-icon-contrast: #000;
+  /* Embedded Video components (downloads, exports) take Music's dark colours. */
+  --yt-chip: rgba(255, 255, 255, 0.1);
+  --yt-chip-hover: rgba(255, 255, 255, 0.2);
+  --yt-chip-active: #fff;
+  --yt-chip-active-text: #000;
+  --yt-menu-bg: #282828;
+  --yt-menu-shadow: 0 16px 24px rgba(0, 0, 0, 0.5);
+  --yt-skeleton: rgba(255, 255, 255, 0.08);
+  --yt-red: #1ed760;
+  --success-bg: rgba(30, 215, 96, 0.15);
+  --success-color: #1ed760;
+  --danger-border: rgba(255, 146, 146, 0.3);
   color-scheme: dark;
   background: #000;
   color: var(--text-strong);
@@ -77,8 +54,9 @@
 
 /* ---------- Shell ---------- */
 .music-app {
-  --library-width: 300px;
+  --library-width: min(var(--library-size, 300px), 34vw);
   --panel-width: 0px;
+  position: relative;
   display: grid;
   grid-template-columns: var(--library-width) minmax(0, 1fr);
   grid-template-rows: 64px minmax(0, 1fr);
@@ -90,11 +68,27 @@
   font: 14px/1.5 var(--body);
 }
 .music-app--aside {
-  --panel-width: 330px;
+  --panel-width: min(var(--panel-size, 330px), 30vw);
   grid-template-columns: var(--library-width) minmax(0, 1fr) var(--panel-width);
 }
-.music-app--library-collapsed {
-  --library-width: 72px;
+/* The dividers sit in the 8px gaps between the panels. */
+.music-resize {
+  top: 72px;
+  bottom: 0;
+}
+.music-resize--library {
+  left: calc(8px + var(--library-width));
+}
+.music-resize--panel {
+  right: calc(8px + var(--panel-width));
+}
+.music-resize::after {
+  background: transparent;
+}
+.music-resize:hover::after,
+.music-resize:focus-visible::after,
+.is-resizing-panels .music-resize::after {
+  background: #ffffff66;
 }
 .music-app button,
 .music-menu button,
@@ -165,8 +159,7 @@
 .music-dialog :focus-visible,
 .music-menu :focus-visible,
 .music-fullscreen :focus-visible,
-.audio-player--music :focus-visible,
-.experience-switch :focus-visible {
+.audio-player--music :focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
@@ -2483,13 +2476,9 @@
   font: 600 12px var(--body, sans-serif);
 }
 
-/* ---------- Settings and imports ---------- */
-.music-settings {
-  max-width: 900px;
-}
-.music-settings > h2 {
-  margin: 32px 0 4px;
-  font-size: 18px;
+/* ---------- Imports ---------- */
+.music-page-title {
+  margin-bottom: 24px !important;
 }
 .music-setting {
   display: flex;
@@ -2526,36 +2515,6 @@
 .music-setting .music-shortcut-columns {
   width: 100%;
 }
-.music-switch {
-  position: relative;
-  flex-shrink: 0;
-  width: 40px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 9999px;
-  background: #727272;
-  transition: background 0.2s;
-}
-.music-switch span {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #000;
-  transition: transform 0.2s;
-}
-.music-switch[aria-checked='true'] {
-  background: var(--music-green);
-}
-.music-switch[aria-checked='true'] span {
-  transform: translateX(18px);
-}
-.music-switch:hover {
-  filter: brightness(1.1);
-}
 .music-import {
   margin: 24px 0;
   padding: 24px;
@@ -2577,26 +2536,22 @@
   display: grid;
 }
 
-/* Embedded MusicBox panels (downloads, exports, YouTube playlist tools). */
-.music-app .library-page {
-  max-width: none;
-  padding: 0;
-}
-.music-app .downloads-panel,
+/* Embedded Video panels (downloads, exports, playlist download) in Music's style. */
 .music-app .export-panel,
-.music-app .youtube-playlist-panel {
-  margin-top: 16px;
-  padding: 20px;
-  border-radius: 8px;
+.music-app .download-form {
+  border: 0;
   background: #181818;
-  box-shadow: none;
 }
-.music-app .download-job-card {
-  border-radius: 6px;
-  background: #242424;
-  box-shadow: none;
+.music-app .yt-pill {
+  font-family: var(--body);
+  font-weight: 700;
 }
-.music-app .playlist-export-panel {
+.music-app .download-row:hover,
+.music-app .download-row:focus-within {
+  background: #ffffff12;
+}
+.music-app .downloads--embedded,
+.music-app .download-page--embedded {
   margin-top: 16px;
 }
 
@@ -2974,21 +2929,7 @@
 }
 
 /* ---------- Responsive ---------- */
-@media (min-width: 1700px) {
-  .music-app {
-    --library-width: 340px;
-  }
-  .music-app--aside {
-    --panel-width: 380px;
-  }
-}
 @media (max-width: 1280px) {
-  .music-app {
-    --library-width: 260px;
-  }
-  .music-app--aside {
-    --panel-width: 300px;
-  }
   .music-shortcuts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3004,6 +2945,9 @@
   }
 }
 @media (max-width: 1100px) {
+  .music-resize--panel {
+    display: none;
+  }
   .music-app--aside {
     grid-template-columns: var(--library-width) minmax(0, 1fr);
   }
@@ -3033,6 +2977,9 @@
   }
 }
 @media (max-width: 900px) {
+  .music-resize--library {
+    display: none;
+  }
   .music-app,
   .music-app--aside {
     grid-template-columns: minmax(0, 1fr);
@@ -3384,12 +3331,6 @@
   }
   .music-fullscreen__transport {
     justify-content: center;
-  }
-  .yt-topbar .experience-switch button {
-    padding: 6px;
-  }
-  .yt-topbar .experience-switch svg {
-    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

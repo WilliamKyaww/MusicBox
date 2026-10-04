@@ -16,7 +16,7 @@ export function PlaylistPage({ listId }: { listId: string }) {
   const more = useMorePages<YouTubePlaylistPage>(key)
 
   if (first.error && !first.data) {
-    return <StatusPanel tone="error" title="This playlist could not be loaded" body={first.error} />
+    return <StatusPanel tone="error" title="This Playlist Couldn't Be Loaded" body={first.error} />
   }
 
   const playlist = first.data

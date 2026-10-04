@@ -167,7 +167,7 @@ export function ChannelPage({ channelRef, tab }: ChannelPageProps) {
   const isEmpty = first.data && videos.length === 0 && playlists.length === 0
 
   if (first.error && !first.data && !channel) {
-    return <StatusPanel tone="error" title="This channel could not be loaded" body={first.error} />
+    return <StatusPanel tone="error" title="This Channel Couldn't Be Loaded" body={first.error} />
   }
 
   return (
@@ -198,7 +198,7 @@ export function ChannelPage({ channelRef, tab }: ChannelPageProps) {
       </nav>
 
       {first.error && !first.data ? (
-        <StatusPanel tone="error" title={`Could not load ${tabInfo.label}`} body={first.error} />
+        <StatusPanel tone="error" title={`Couldn't Load ${tabInfo.label}`} body={first.error} />
       ) : null}
       {first.isLoading && !first.data ? <VideoGridSkeleton /> : null}
       {isEmpty ? <StatusPanel title={tabInfo.label} body={tabInfo.empty} /> : null}

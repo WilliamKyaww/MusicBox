@@ -41,7 +41,7 @@ export function formatTotalDuration(seconds: number) {
 }
 
 export function formatCount(value: number | null | undefined) {
-  return typeof value === 'number' ? value.toLocaleString('en-US') : ''
+  return typeof value === 'number' ? value.toLocaleString('en-GB') : ''
 }
 
 /** Spotify's "Date added" column: relative for recent dates, then the date itself. */
@@ -56,7 +56,7 @@ export function formatAdded(iso: string | null | undefined, now = new Date()) {
     const weeks = Math.floor(days / 7)
     return `${weeks} week${weeks === 1 ? '' : 's'} ago`
   }
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('en-GB', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

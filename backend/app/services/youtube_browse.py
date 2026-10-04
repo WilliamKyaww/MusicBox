@@ -89,7 +89,7 @@ class _TtlCache:
                 self._items.pop(stale_key, None)
 
     def key_lock(self, key: Any) -> threading.Lock:
-        """Serialize work per key so parallel requests share one extraction."""
+        """Serialise work per key so parallel requests share one extraction."""
         with self._lock:
             return self._key_locks.setdefault(key, threading.Lock())
 

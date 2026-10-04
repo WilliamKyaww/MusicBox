@@ -23,8 +23,9 @@ export type Route =
   | { name: 'subscriptions' }
   | { name: 'history' }
   | { name: 'songs' }
-  | { name: 'playlists' }
+  | { name: 'playlists'; playlistId: string | null }
   | { name: 'import' }
+  | { name: 'settings' }
 
 const CHANNEL_TABS: ChannelTab[] = ['videos', 'shorts', 'live', 'playlists']
 const ORDERS: SearchOrder[] = ['relevance', 'date', 'viewCount', 'rating']
@@ -90,11 +91,13 @@ export function parseRoute(hash: string): Route {
       const listId = params.get('list')
       return listId ? { name: 'playlist', listId } : { name: 'home' }
     }
+    case 'playlists':
+      return { name: 'playlists', playlistId: params.get('id') }
     case 'subscriptions':
     case 'history':
     case 'songs':
-    case 'playlists':
     case 'import':
+    case 'settings':
       return { name: segments[0] }
     default:
       return { name: 'home' }
@@ -122,8 +125,10 @@ export const paths = {
   subscriptions: () => '#/subscriptions',
   history: () => '#/history',
   songs: () => '#/songs',
-  playlists: () => '#/playlists',
+  playlists: (playlistId?: string) =>
+    playlistId ? `#/playlists?id=${encodeURIComponent(playlistId)}` : '#/playlists',
   import: () => '#/import',
+  settings: () => '#/settings',
 }
 
 export function navigate(path: string, options: { replace?: boolean } = {}) {

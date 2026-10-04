@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { clearHistory, removeHistoryEntry, useLibrary, type HistoryEntry } from '../library'
 import { useVideoActions } from '../videoActions'
+import { HistoryIcon, SearchIcon, TrashIcon } from '../components/Icons'
 import { ModalDialog } from '../components/ModalDialog'
-import { StatusPanel } from '../components/StatusPanel'
+import { PageHeader } from '../components/PageHeader'
 import { VideoListItem } from '../components/VideoListItem'
 
 function dayLabel(isoDate: string, now = new Date()) {
@@ -13,8 +14,8 @@ function dayLabel(isoDate: string, now = new Date()) {
 
   if (daysAgo <= 0) return 'Today'
   if (daysAgo === 1) return 'Yesterday'
-  if (daysAgo < 7) return date.toLocaleDateString('en', { weekday: 'long' })
-  return date.toLocaleDateString('en', {
+  if (daysAgo < 7) return date.toLocaleDateString('en-GB', { weekday: 'long' })
+  return date.toLocaleDateString('en-GB', {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
@@ -51,58 +52,66 @@ export function HistoryPage() {
     : history
 
   return (
-    <div className="history-page">
-      <div className="history-page__main">
-        <h1 className="page-title">Watch history</h1>
-        {history.length === 0 ? (
-          <StatusPanel
-            title="This list has no videos."
-            body="Videos you watch here will show up in your history."
+    <div className="library-view library-view--narrow">
+      <PageHeader
+        title="Watch History"
+        subtitle="Stored on this device only, along with where you left off in each video."
+        actions={
+          <button
+            type="button"
+            className="yt-pill"
+            disabled={history.length === 0}
+            onClick={() => setConfirmingClear(true)}
+          >
+            <TrashIcon className="yt-icon" />
+            Clear all
+          </button>
+        }
+      >
+        <label className="toolbar-search">
+          <SearchIcon className="yt-icon" />
+          <input
+            type="search"
+            aria-label="Search watch history"
+            placeholder="Search watch history"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
           />
-        ) : null}
-        {groupByDay(visible).map((group) => (
-          <section key={group.label} className="history-group">
-            <h2>{group.label}</h2>
-            {group.entries.map((entry) => (
-              <VideoListItem
-                key={entry.video.id}
-                video={entry.video}
-                onOpen={() =>
-                  setWatchQueue({ label: 'History', items: visible.map((item) => item.video) })
-                }
-                onRemove={() => removeHistoryEntry(entry.video.id)}
-                removeLabel="Remove from watch history"
-              />
-            ))}
-          </section>
-        ))}
-      </div>
+        </label>
+      </PageHeader>
 
-      <aside className="history-page__side">
-        <input
-          type="search"
-          className="history-page__search"
-          placeholder="Search watch history"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-        />
-        <button
-          type="button"
-          className="yt-pill"
-          disabled={history.length === 0}
-          onClick={() => setConfirmingClear(true)}
-        >
-          Clear all watch history
-        </button>
-        <p className="history-page__note">
-          History and resume points are stored in this browser only.
-        </p>
-      </aside>
+      {history.length === 0 ? (
+        <div className="empty-state">
+          <HistoryIcon className="yt-icon" />
+          <h2>Nothing Here Yet</h2>
+          <p>Videos you watch show up here, so you can pick up where you left off.</p>
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="empty-state empty-state--compact">
+          <SearchIcon className="yt-icon" />
+          <p>Nothing in your history matches "{filter.trim()}".</p>
+        </div>
+      ) : null}
+
+      {groupByDay(visible).map((group) => (
+        <section key={group.label} className="history-group">
+          <h2>{group.label}</h2>
+          {group.entries.map((entry) => (
+            <VideoListItem
+              key={entry.video.id}
+              video={entry.video}
+              onOpen={() => setWatchQueue({ label: 'History', items: visible.map((item) => item.video) })}
+              onRemove={() => removeHistoryEntry(entry.video.id)}
+              removeLabel="Remove from watch history"
+            />
+          ))}
+        </section>
+      ))}
 
       {confirmingClear ? (
         <ModalDialog
-          title="Clear watch history?"
-          description="This also clears resume points for partly watched videos."
+          title="Clear Watch History?"
+          description="This also clears where you left off in partly watched videos."
           confirmLabel="Clear history"
           confirmTone="danger"
           onConfirm={() => {

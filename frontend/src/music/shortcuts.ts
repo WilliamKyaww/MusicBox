@@ -32,7 +32,7 @@ export const SHORTCUTS: { group: string; items: [string, string][] }[] = [
       ['Alt + Shift + L', 'Collapse or expand Your Library'],
       ['Ctrl + N', 'New playlist (desktop app; browsers keep this key)'],
       ['Ctrl + /', 'Show these shortcuts'],
-      ['Escape', 'Close menus, dialogs and full screen'],
+      ['Escape', 'Close menus, dialogues and full screen'],
     ],
   },
 ]

@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { navigate, paths } from '../router'
-import { CloseIcon, MenuIcon, MoonIcon, SearchIcon, SunIcon } from '../components/Icons'
-import { ExperienceSwitcher } from '../components/ExperienceSwitcher'
+import { AppControls } from '../components/AppControls'
+import { ArrowLeftIcon, CloseIcon, MenuIcon, SearchIcon } from '../components/Icons'
 
 type TopBarProps = {
   initialQuery: string
   onToggleSidebar: () => void
-  theme: 'light' | 'dark'
-  onToggleTheme: () => void
   isProcessing: boolean
 }
 
@@ -23,7 +21,15 @@ export function Logo() {
   )
 }
 
-function SearchForm({ initialQuery }: { initialQuery: string }) {
+function SearchForm({
+  initialQuery,
+  autoFocus,
+  onClose,
+}: {
+  initialQuery: string
+  autoFocus: boolean
+  onClose: () => void
+}) {
   const [value, setValue] = useState(initialQuery)
 
   return (
@@ -36,6 +42,7 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
         if (query) {
           navigate(paths.results(query))
           ;(document.activeElement as HTMLElement | null)?.blur()
+          onClose()
         }
       }}
     >
@@ -45,10 +52,14 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
           type="search"
           value={value}
           onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') onClose()
+          }}
           placeholder="Search"
           aria-label="Search"
           autoComplete="off"
           spellCheck={false}
+          autoFocus={autoFocus}
         />
         {value ? (
           <button
@@ -71,12 +82,13 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
 export function TopBar({
   initialQuery,
   onToggleSidebar,
-  theme,
-  onToggleTheme,
   isProcessing,
 }: TopBarProps) {
+  // On phone-sized windows the search box folds into an icon that opens a full-width bar.
+  const [searching, setSearching] = useState(false)
+
   return (
-    <header className="yt-topbar">
+    <header className={`yt-topbar${searching ? ' yt-topbar--searching' : ''}`}>
       <div className="yt-topbar__start">
         <button
           type="button"
@@ -90,26 +102,41 @@ export function TopBar({
         <Logo />
       </div>
 
+      <button
+        type="button"
+        className="yt-icon-button yt-topbar__search-back"
+        onClick={() => setSearching(false)}
+        aria-label="Close search"
+        title="Back"
+      >
+        <ArrowLeftIcon className="yt-icon" />
+      </button>
+
       {/* Remount on route changes so the box shows the current query. */}
-      <SearchForm key={initialQuery} initialQuery={initialQuery} />
+      <SearchForm
+        key={`${initialQuery}:${searching}`}
+        initialQuery={initialQuery}
+        autoFocus={searching}
+        onClose={() => setSearching(false)}
+      />
 
       <div className="yt-topbar__end">
-        <ExperienceSwitcher active="video" />
+        <button
+          type="button"
+          className="yt-icon-button yt-topbar__search-open"
+          onClick={() => setSearching(true)}
+          aria-label="Open search"
+          title="Search"
+        >
+          <SearchIcon className="yt-icon" />
+        </button>
         {isProcessing ? (
           <a className="yt-topbar__status" href={paths.songs()} title="Downloads in progress">
             <span className="yt-spinner yt-spinner--small" />
             Processing
           </a>
         ) : null}
-        <button
-          type="button"
-          className="yt-icon-button"
-          onClick={onToggleTheme}
-          title={theme === 'light' ? 'Dark theme' : 'Light theme'}
-          aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-        >
-          {theme === 'light' ? <MoonIcon className="yt-icon" /> : <SunIcon className="yt-icon" />}
-        </button>
+        <AppControls experience="video" />
       </div>
     </header>
   )

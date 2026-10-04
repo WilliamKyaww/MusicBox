@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
 } from 'react'
 import {
   DEFAULT_DOWNLOAD_OPTIONS,
@@ -43,7 +44,7 @@ import { AudioPlayer } from './components/AudioPlayer'
 import { DownloadOptionsDialog } from './components/DownloadOptionsDialog'
 import { DownloadQueuePanel } from './components/DownloadQueuePanel'
 import { PlaylistExportPanel } from './components/PlaylistExportPanel'
-import { PlaylistPanel } from './components/PlaylistPanel'
+import { PageHeader } from './components/PageHeader'
 import { SaveToPlaylistDialog } from './components/SaveToPlaylistDialog'
 import { ToastViewport } from './components/ToastViewport'
 import { YouTubePlaylistDownloadPanel } from './components/YouTubePlaylistDownloadPanel'
@@ -53,6 +54,7 @@ import { ChannelPage } from './pages/ChannelPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { HomePage } from './pages/HomePage'
 import { PlaylistPage } from './pages/PlaylistPage'
+import { SavedPlaylistsPage } from './pages/SavedPlaylistsPage'
 import { SearchPage } from './pages/SearchPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import { WatchPage } from './pages/WatchPage'
@@ -69,6 +71,9 @@ import { appendAutoplay, clearQueued, enqueueTrack, moveQueuedTrack, moveQueuedT
 import { radioCandidates } from './music/recommend'
 import { getMusicState, recordPlay, updateMusicState, useMusicStore } from './music/store'
 import { LikeButton } from './music/ui'
+import { usePanelSize } from './panelSizes'
+import { SettingsPage } from './settings/SettingsPage'
+import { useTheme } from './theme'
 import type {
   DownloadJob,
   DiscordPresenceStatus,
@@ -84,6 +89,7 @@ import type {
 import './App.css'
 import './youtube.css'
 import './music/music.css'
+import './shared.css'
 
 type ToastMessage = { id: number; message: string }
 type LoopMode = 'off' | 'once' | 'all' | 'one'
@@ -94,16 +100,6 @@ type DownloadTarget = {
 
 const SIDEBAR_FULL_QUERY = '(min-width: 1312px)'
 const SIDEBAR_MINI_QUERY = '(min-width: 792px)'
-
-function getInitialTheme(): 'light' | 'dark' {
-  try {
-    const stored = localStorage.getItem('spotimy-theme')
-    if (stored === 'dark' || stored === 'light') return stored
-  } catch {
-    return 'light'
-  }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
 
 function useMediaQuery(query: string) {
   return useSyncExternalStore(
@@ -125,7 +121,8 @@ function App() {
   const isMediumScreen = useMediaQuery(SIDEBAR_MINI_QUERY)
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
+  const theme = useTheme()
+  const sidebarWidth = usePanelSize('yt-sidebar')
   const [playerSession, setPlayerSession] = useState<PlayerSession | null>(() => route.name === 'watch' ? null : readSavedSession())
   const [playRequest, setPlayRequest] = useState(0)
   const [musicFullScreen, setMusicFullScreen] = useState(false)
@@ -936,19 +933,10 @@ function App() {
     return downloadJobs.find((job) => job.video_id === videoId) ?? null
   }
 
-  // Keep theme in sync with DOM and localStorage.
+  // The theme store saves changes; this applies the stored theme on start-up.
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
-    try {
-      localStorage.setItem('spotimy-theme', theme)
-    } catch {
-      // Some private browsing modes block storage writes.
-    }
   }, [theme])
-
-  function toggleTheme() {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))
-  }
 
   function handlePlayVideo(
     videoId: string,
@@ -1266,9 +1254,72 @@ function App() {
       case 'history':
         return <HistoryPage />
       case 'songs':
+        return renderDownloads(false)
+      case 'playlists':
+        if (route.name !== 'playlists') return null
         return (
-          <div className="library-page">
+          <div className="library-view">
+            <SavedPlaylistsPage
+              playlistId={route.playlistId}
+              playlists={playlists}
+              errorMessage={playlistsErrorMessage}
+              isCreating={isCreatingPlaylist}
+              isMutating={isMutatingPlaylist}
+              onCreatePlaylist={handleCreatePlaylist}
+              onRenamePlaylist={handleRenamePlaylist}
+              onDeletePlaylist={handleDeletePlaylist}
+              onRemoveItem={handleRemovePlaylistItem}
+              onMoveItem={handleMovePlaylistItem}
+              onPlayPlaylist={handlePlayPlaylist}
+              onPlayItem={handlePlayPlaylistItem}
+              playingPlaylistId={playerSession?.source === 'playlist' ? playerSession.playlistId : null}
+              playingVideoId={currentTrack?.videoId ?? null}
+              exportPanel={renderExportPanel(playlists.find((playlist) => playlist.id === route.playlistId) ?? null)}
+            />
+          </div>
+        )
+      case 'import':
+        return (
+          <div className="library-view library-view--narrow">
+            <YouTubePlaylistDownloadPanel
+              exportJobs={exportJobs}
+              errorMessage={exportsErrorMessage}
+              isCreating={isCreatingYouTubePlaylistExport}
+              pendingRemovalIds={pendingExportRemovalIds}
+              onCreateExport={handleCreateYouTubePlaylistExport}
+              onRemoveExport={handleRemoveExport}
+            />
+          </div>
+        )
+      case 'settings':
+        return (
+          <div className="library-view">
+            <PageHeader title="Settings" subtitle="Connections, playback, appearance and privacy." />
+            <SettingsPage experience="video" />
+          </div>
+        )
+    }
+  }
+
+  function renderExportPanel(playlist: Playlist | null) {
+    return (
+      <PlaylistExportPanel
+        activePlaylist={playlist}
+        exportJobs={exportJobs}
+        errorMessage={exportsErrorMessage}
+        isCreatingExport={isCreatingExport}
+        pendingRemovalIds={pendingExportRemovalIds}
+        onCreateExport={handleCreateExport}
+        onRemoveExport={handleRemoveExport}
+      />
+    )
+  }
+
+  function renderDownloads(embedded: boolean) {
+    return (
+      <div className={embedded ? undefined : 'library-view'}>
             <DownloadQueuePanel
+              embedded={embedded}
               runtime={downloadRuntime}
               jobs={downloadJobs}
               errorMessage={downloadsErrorMessage}
@@ -1286,57 +1337,8 @@ function App() {
               onPlay={handlePlayDownload}
               onWatch={handleWatchDownload}
             />
-          </div>
-        )
-      case 'playlists':
-        return (
-          <div className="library-page">
-            <PlaylistPanel
-              playlists={playlists}
-              activePlaylistId={activePlaylist?.id ?? null}
-              errorMessage={playlistsErrorMessage}
-              isCreating={isCreatingPlaylist}
-              isMutating={isMutatingPlaylist}
-              pendingVideoId={pendingPlaylistVideoId}
-              onSelectPlaylist={setActivePlaylistId}
-              onCreatePlaylist={(name) => void handleCreatePlaylist(name)}
-              onRenamePlaylist={handleRenamePlaylist}
-              onDeletePlaylist={handleDeletePlaylist}
-              onRemoveItem={handleRemovePlaylistItem}
-              onMoveItem={handleMovePlaylistItem}
-              onPlayPlaylist={handlePlayPlaylist}
-              onPlayItem={handlePlayPlaylistItem}
-              playingPlaylistId={
-                playerSession?.source === 'playlist' ? playerSession.playlistId : null
-              }
-              playingVideoId={currentTrack?.videoId ?? null}
-            />
-
-            <PlaylistExportPanel
-              activePlaylist={activePlaylist}
-              exportJobs={exportJobs}
-              errorMessage={exportsErrorMessage}
-              isCreatingExport={isCreatingExport}
-              pendingRemovalIds={pendingExportRemovalIds}
-              onCreateExport={handleCreateExport}
-              onRemoveExport={handleRemoveExport}
-            />
-          </div>
-        )
-      case 'import':
-        return (
-          <div className="library-page">
-            <YouTubePlaylistDownloadPanel
-              exportJobs={exportJobs}
-              errorMessage={exportsErrorMessage}
-              isCreating={isCreatingYouTubePlaylistExport}
-              pendingRemovalIds={pendingExportRemovalIds}
-              onCreateExport={handleCreateYouTubePlaylistExport}
-              onRemoveExport={handleRemoveExport}
-            />
-          </div>
-        )
-    }
+      </div>
+    )
   }
 
   return (
@@ -1356,14 +1358,13 @@ function App() {
         onCreatePlaylist={handleCreatePlaylist}
         onRenamePlaylist={handleRenamePlaylist} onDeletePlaylist={handleDeletePlaylist}
         onRemoveItem={handleRemovePlaylistItem} onReorderPlaylist={handleReorderPlaylist} onToast={pushToast}
-        downloadsPanel={renderPage('songs')} importsPanel={renderPage('import')}
-        exportsPanel={<PlaylistExportPanel activePlaylist={activePlaylist} exportJobs={exportJobs} errorMessage={exportsErrorMessage} isCreatingExport={isCreatingExport} pendingRemovalIds={pendingExportRemovalIds} onCreateExport={handleCreateExport} onRemoveExport={handleRemoveExport}/>}
-      /> : <>
+        downloadsPanel={renderDownloads(true)}
+        importsPanel={<YouTubePlaylistDownloadPanel embedded exportJobs={exportJobs} errorMessage={exportsErrorMessage} isCreating={isCreatingYouTubePlaylistExport} pendingRemovalIds={pendingExportRemovalIds} onCreateExport={handleCreateYouTubePlaylistExport} onRemoveExport={handleRemoveExport} />}
+        exportsPanel={renderExportPanel(activePlaylist)}
+      /> : <div className="yt-shell" style={{ '--yt-sidebar-width': `${sidebarWidth}px` } as CSSProperties}>
       <TopBar
         initialQuery={route.name === 'results' ? route.query : ''}
         onToggleSidebar={handleToggleSidebar}
-        theme={theme}
-        onToggleTheme={toggleTheme}
         isProcessing={hasActiveDownloads || hasActiveExports}
       />
       <Sidebar
@@ -1379,7 +1380,7 @@ function App() {
       >
         {renderPage()}
       </main>
-      </>}
+      </div>}
 
       {downloadTarget ? (
         <DownloadOptionsDialog

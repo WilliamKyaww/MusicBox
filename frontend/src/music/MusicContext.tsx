@@ -36,7 +36,7 @@ export type MusicActions = {
   saveToPlaylists: (video: VideoSearchResult) => void
   addToPlaylist: (video: VideoSearchResult, playlistId: string) => Promise<void>
   createPlaylist: (name: string) => Promise<Playlist | null>
-  /** Opens the create-playlist dialog. */
+  /** Opens the create-playlist dialogue. */
   newPlaylist: (thenAdd?: VideoSearchResult) => void
   editPlaylist: (playlist: Playlist) => void
   confirmDeletePlaylist: (playlist: Playlist) => void
@@ -67,6 +67,8 @@ export type StickyHeader = {
   hue: number | null
   onPlay?: () => void
   playing?: boolean
+  /** How far the page scrolls before the bar shows the title; small for pages with a plain heading. */
+  threshold?: number
 }
 
 export const MusicContext = createContext<MusicActions | null>(null)

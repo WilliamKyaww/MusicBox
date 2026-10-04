@@ -1,0 +1,6 @@
+# Windows batch files keep CRLF line endings; cmd.exe can misread labels in LF-only files.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts run inside Linux containers and need LF line endings.
+*.sh text eol=lf

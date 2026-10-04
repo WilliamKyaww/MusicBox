@@ -12,6 +12,7 @@ import { getPlayerPrefs, updatePlayerPrefs } from '../library'
 import {
   CaptionsIcon,
   ChevronRightIcon,
+  CloseIcon,
   ExitFullscreenIcon,
   FullscreenIcon,
   NextIcon,
@@ -772,7 +773,7 @@ export function VideoPlayer({
         <div className="yt-player__notice" role="status">
           {notice}
           <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss">
-            ×
+            <CloseIcon className="yt-icon" />
           </button>
         </div>
       ) : null}
@@ -951,8 +952,8 @@ export function VideoPlayer({
                 type="button"
                 className="yt-player__button"
                 onClick={onToggleTheater}
-                aria-label={theater ? 'Default view (t)' : 'Theater mode (t)'}
-                title={theater ? 'Default view (t)' : 'Theater mode (t)'}
+                aria-label={theater ? 'Default view (t)' : 'Theatre mode (t)'}
+                title={theater ? 'Default view (t)' : 'Theatre mode (t)'}
               >
                 <TheaterIcon className="yt-icon" />
               </button>

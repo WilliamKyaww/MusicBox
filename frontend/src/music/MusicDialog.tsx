@@ -73,7 +73,7 @@ export function MusicDialog({
           <button
             className="music-icon-button"
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label="Close dialogue"
           >
             <MusicIcon name="close" />
           </button>

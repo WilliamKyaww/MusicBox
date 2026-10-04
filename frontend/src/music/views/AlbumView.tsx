@@ -52,7 +52,7 @@ export function AlbumView({ route }: { route: MusicRoute }) {
     return (
       <div className="music-empty">
         <MusicIcon name="album" />
-        <h3>Couldn't load this playlist</h3>
+        <h3>Couldn't Load This Playlist</h3>
         <p>{first.error}</p>
       </div>
     )

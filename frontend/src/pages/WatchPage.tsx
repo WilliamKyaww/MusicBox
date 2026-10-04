@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { getVideoThumbnailHref } from '../api/downloads'
 import { fetchChannelPage, fetchVideoDetails, fetchYouTubePlaylist } from '../api/browse'
 import { formatCompact, formatSubscribers } from '../format'
@@ -13,6 +13,8 @@ import { navigate, paths } from '../router'
 import { cacheKeys, useCachedResource } from '../useCachedResource'
 import { detailsToVideo, useVideoActions, type WatchQueue } from '../videoActions'
 import { ChannelAvatar } from '../components/ChannelAvatar'
+import { ResizeHandle } from '../components/ResizeHandle'
+import { PANELS, resetPanelSize, setPanelSize, usePanelSize } from '../panelSizes'
 import {
   DownloadIcon,
   ExternalLinkIcon,
@@ -50,7 +52,7 @@ function buildUpNext(
 ): { label: string; videos: VideoSearchResult[] } {
   const seen = new Set([videoId])
   const videos: VideoSearchResult[] = []
-  let label = 'Up next'
+  let label = 'Up Next'
 
   const queueIndex = queue?.items.findIndex((video) => video.id === videoId) ?? -1
   if (queue && queueIndex >= 0) {
@@ -97,7 +99,7 @@ export function WatchPage({ videoId, startSeconds, listId, watchQueue }: WatchPa
     return (
       <StatusPanel
         tone="error"
-        title="This video could not be loaded"
+        title="This Video Couldn't Be Loaded"
         body={
           <>
             {error}{' '}
@@ -125,6 +127,7 @@ export function WatchPage({ videoId, startSeconds, listId, watchQueue }: WatchPa
 type WatchViewProps = Omit<WatchPageProps, 'videoId'> & { details: VideoDetails }
 
 function WatchView({ details, startSeconds, listId, watchQueue }: WatchViewProps) {
+  const sideWidth = usePanelSize('yt-watch-side')
   const actions = useVideoActions()
   const playerRef = useRef<VideoPlayerHandle>(null)
   const clipPreviewEndRef = useRef<number | null>(null)
@@ -231,7 +234,20 @@ function WatchView({ details, startSeconds, listId, watchQueue }: WatchViewProps
   const channelLink = details.channel_id ? paths.channel(details.channel_id) : undefined
 
   return (
-    <div className={`watch ${theater ? 'watch--theater' : ''}`}>
+    <div
+      className={`watch ${theater ? 'watch--theater' : ''}`}
+      style={{ '--watch-side-width': `${sideWidth}px` } as CSSProperties}
+    >
+      <ResizeHandle
+        className="watch__resize"
+        label="Resize Up Next"
+        value={sideWidth}
+        min={PANELS['yt-watch-side'].min}
+        max={PANELS['yt-watch-side'].max}
+        side="end"
+        onResize={(next) => setPanelSize('yt-watch-side', next)}
+        onReset={() => resetPanelSize('yt-watch-side')}
+      />
       <div className="watch__player">
         <VideoPlayer
           ref={playerRef}

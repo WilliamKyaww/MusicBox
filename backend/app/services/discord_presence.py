@@ -29,7 +29,6 @@ def _truncate(value: str, max_length: int = 128) -> str:
 
 class DiscordPresenceManager:
     def __init__(self) -> None:
-        self._settings = get_settings()
         self._lock = asyncio.Lock()
         self._worker_lock = RLock()
         self._worker_loop: asyncio.AbstractEventLoop | None = None
@@ -49,9 +48,10 @@ class DiscordPresenceManager:
             last_error=self._last_error,
         )
 
+    # Settings are read live, so changes saved on the Settings page apply at once.
     @property
     def enabled(self) -> bool:
-        return self._settings.discord_presence_enabled
+        return get_settings().discord_presence_enabled
 
     @property
     def configured(self) -> bool:
@@ -65,7 +65,7 @@ class DiscordPresenceManager:
         return self._build_status()
 
     def _get_client_id(self) -> str:
-        return self._settings.discord_client_id.strip()
+        return get_settings().discord_client_id.strip()
 
     def _validate_client_id(self) -> str:
         client_id = self._get_client_id()

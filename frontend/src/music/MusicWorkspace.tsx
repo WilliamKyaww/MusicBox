@@ -4,14 +4,19 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
-import { ExperienceSwitcher } from '../components/ExperienceSwitcher'
+import { AppControls } from '../components/AppControls'
+import { ResizeHandle } from '../components/ResizeHandle'
 import { artistPath, musicPath, type MusicRoute } from '../experience'
 import { navigate, paths } from '../router'
+import { PANELS, resetPanelSize, setPanelSize, usePanelSize } from '../panelSizes'
+import { SettingsPage } from '../settings/SettingsPage'
 import type { DownloadJob, Playlist, VideoSearchResult } from '../types'
 import { FullScreenPlayer } from './FullScreenPlayer'
 import { copyText, hueStyle } from './helpers'
+import { useStickyHeader } from './hooks'
 import { LibraryPanel } from './LibraryPanel'
 import { Menu, type MenuAnchor, type MenuItem } from './Menu'
 import { MusicDialog } from './MusicDialog'
@@ -48,7 +53,6 @@ import { HomeView } from './views/HomeView'
 import { ArtistsView, ImportsView, PlaylistsView } from './views/LibraryViews'
 import { LyricsView } from './views/LyricsView'
 import { SearchView } from './views/SearchView'
-import { SettingsView } from './views/SettingsView'
 
 type Props = {
   route: MusicRoute
@@ -95,6 +99,19 @@ type Editing =
   | { mode: 'rename-folder'; folder: Folder }
 
 const SCROLLED_AT = 260
+const PLAIN_HEADING = 72
+const LIBRARY_RAIL = 72
+const LIBRARY_SNAP = 200
+
+function MusicSettings() {
+  useStickyHeader({ title: 'Settings', hue: null, threshold: PLAIN_HEADING })
+  return (
+    <div className="music-page music-page--padded">
+      <h1 className="music-page-title">Settings</h1>
+      <SettingsPage experience="music" />
+    </div>
+  )
+}
 
 export function MusicWorkspace(props: Props) {
   const { route, currentVideo } = props
@@ -105,7 +122,7 @@ export function MusicWorkspace(props: Props) {
   const [menu, setMenu] = useState<{ items: MenuItem[]; anchor: MenuAnchor; label: string } | null>(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [mobileLibrary, setMobileLibrary] = useState(false)
-  const [sticky, setSticky] = useState<Omit<StickyHeader, 'onPlay'> & { canPlay: boolean } | null>(null)
+  const [sticky, setSticky] = useState<(Omit<StickyHeader, 'onPlay'> & { canPlay: boolean }) | null>(null)
   const stickyPlay = useRef<(() => void) | undefined>(undefined)
   const [scrolled, setScrolled] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -145,12 +162,14 @@ export function MusicWorkspace(props: Props) {
         hue: header.hue,
         playing: header.playing,
         canPlay: Boolean(header.onPlay),
+        threshold: header.threshold ?? SCROLLED_AT,
       }
       return previous &&
         previous.title === next.title &&
         previous.hue === next.hue &&
         previous.playing === next.playing &&
-        previous.canPlay === next.canPlay
+        previous.canPlay === next.canPlay &&
+        previous.threshold === next.threshold
         ? previous
         : next
     })
@@ -359,6 +378,20 @@ export function MusicWorkspace(props: Props) {
     },
   })
 
+  const librarySize = usePanelSize('music-library')
+  const panelSize = usePanelSize('music-side')
+  // Like Spotify, dragging the library narrow snaps it to the icon rail, and
+  // dragging the rail out opens it again.
+  function resizeLibrary(width: number) {
+    const collapsed = getMusicState().libraryCollapsed
+    if (width < LIBRARY_SNAP) {
+      if (!collapsed) updateMusicState({ libraryCollapsed: true })
+      return
+    }
+    if (collapsed) updateMusicState({ libraryCollapsed: false })
+    setPanelSize('music-library', width)
+  }
+
   const routeKey = `${route.view}:${route.id}:${route.query}:${route.title}:${route.video}`
   const mainRef = useRef<HTMLElement>(null)
   const [shownRoute, setShownRoute] = useState(routeKey)
@@ -407,17 +440,17 @@ export function MusicWorkspace(props: Props) {
       case 'imports':
         return <ImportsView importsPanel={props.importsPanel} />
       case 'settings':
-        return <SettingsView onShowShortcuts={() => setShowShortcuts(true)} />
+        return <MusicSettings />
     }
   }
 
   const editorTitle = editing
     ? {
-        create: 'Create playlist',
-        edit: 'Edit details',
+        create: 'Create Playlist',
+        edit: 'Edit Details',
         delete: 'Delete from Your Library?',
-        folder: 'Create folder',
-        'rename-folder': 'Rename folder',
+        folder: 'Create Folder',
+        'rename-folder': 'Rename Folder',
       }[editing.mode]
     : ''
 
@@ -427,7 +460,38 @@ export function MusicWorkspace(props: Props) {
         className={`music-app ${panel ? 'music-app--aside' : ''} ${
           music.libraryCollapsed ? 'music-app--library-collapsed' : ''
         } ${currentVideo ? '' : 'music-app--idle'}`}
+        style={
+          {
+            '--library-size': `${music.libraryCollapsed ? LIBRARY_RAIL : librarySize}px`,
+            '--panel-size': `${panelSize}px`,
+          } as CSSProperties
+        }
       >
+        <ResizeHandle
+          className="music-resize music-resize--library"
+          label="Resize Your Library"
+          value={music.libraryCollapsed ? LIBRARY_RAIL : librarySize}
+          min={LIBRARY_RAIL}
+          max={PANELS['music-library'].max}
+          side="start"
+          onResize={resizeLibrary}
+          onReset={() => {
+            updateMusicState({ libraryCollapsed: false })
+            resetPanelSize('music-library')
+          }}
+        />
+        {panel ? (
+          <ResizeHandle
+            className="music-resize music-resize--panel"
+            label={panel === 'queue' ? 'Resize queue' : 'Resize Now Playing view'}
+            value={panelSize}
+            min={PANELS['music-side'].min}
+            max={PANELS['music-side'].max}
+            side="end"
+            onResize={(width) => setPanelSize('music-side', width)}
+            onReset={() => resetPanelSize('music-side')}
+          />
+        ) : null}
         <header className="music-topbar">
           <a className="music-brand" href={musicPath()} aria-label="MusicBox home">
             <img src="/favicon.svg" alt="" />
@@ -490,15 +554,7 @@ export function MusicWorkspace(props: Props) {
                 <span>Private session</span>
               </span>
             ) : null}
-            <ExperienceSwitcher active="music" />
-            <a
-              className="music-icon-button"
-              href={musicPath('settings')}
-              aria-label="Listening settings"
-              title="Settings"
-            >
-              <MusicIcon name="settings" />
-            </a>
+            <AppControls experience="music" />
           </div>
         </header>
 
@@ -513,7 +569,7 @@ export function MusicWorkspace(props: Props) {
           className="music-main"
           style={scrolledHue}
           onScroll={(event) => {
-            const next = event.currentTarget.scrollTop > SCROLLED_AT
+            const next = event.currentTarget.scrollTop > (sticky?.threshold ?? SCROLLED_AT)
             if (next !== scrolled) setScrolled(next)
           }}
         >
@@ -607,7 +663,7 @@ export function MusicWorkspace(props: Props) {
         ) : null}
 
         {showShortcuts ? (
-          <MusicDialog title="Keyboard shortcuts" onClose={() => setShowShortcuts(false)}>
+          <MusicDialog title="Keyboard Shortcuts" onClose={() => setShowShortcuts(false)}>
             <div className="music-shortcut-columns">
               {SHORTCUTS.map((group) => (
                 <dl key={group.group} className="music-shortcut-list">

@@ -93,6 +93,42 @@ export const radioSongs = [
   video_url: `https://www.youtube.com/watch?v=${id}`,
 }))
 
+function settingsResponse(values: Record<string, string | boolean | number>) {
+  const field = (key: string, label: string, group: string, kind: string, extra: object = {}) => ({
+    key,
+    label,
+    group,
+    kind,
+    description: `${label} description.`,
+    restart_required: false,
+    minimum: null,
+    maximum: null,
+    locked: false,
+    is_set: kind === 'secret' ? Boolean(values[key]) : true,
+    // Secrets are write-only, as in the real backend.
+    value: kind === 'secret' ? null : values[key],
+    ...extra,
+  })
+  return {
+    config_file: 'C:/MusicBox/backend/.env',
+    read_only_reason: null,
+    groups: [
+      { id: 'youtube', label: 'YouTube' },
+      { id: 'discord', label: 'Discord' },
+      { id: 'downloads', label: 'Downloads' },
+    ],
+    fields: [
+      field('YOUTUBE_API_KEY', 'YouTube Data API Key', 'youtube', 'secret'),
+      field('DISCORD_PRESENCE_ENABLED', 'Discord Status', 'discord', 'boolean'),
+      field('MAX_CONCURRENT_DOWNLOADS', 'Simultaneous Downloads', 'downloads', 'integer', {
+        restart_required: true,
+        minimum: 1,
+        maximum: 8,
+      }),
+    ],
+  }
+}
+
 function silentWav() {
   const bytes = 8000 * 20 * 2
   const data = Buffer.alloc(44 + bytes)
@@ -136,6 +172,12 @@ export async function mockLibrary(page: Page) {
     presenceDelay: 0,
     presenceActive: false,
     completedPresence: [] as string[],
+    // Settings page: what the mocked backend has stored, and every write it received.
+    settings: { YOUTUBE_API_KEY: '', DISCORD_PRESENCE_ENABLED: false, MAX_CONCURRENT_DOWNLOADS: 2 } as Record<
+      string,
+      string | boolean | number
+    >,
+    settingsWrites: [] as { values: Record<string, unknown>; guarded: boolean }[],
   }
   const audio = silentWav()
   await page.route('**/test-art/**', (route) => {
@@ -179,6 +221,19 @@ export async function mockLibrary(page: Page) {
           items: [],
         })
       if (path === '/api/exports') return json({ items: [] })
+      if (path === '/api/settings') {
+        if (request.method() === 'PUT') {
+          const guarded = request.headers()['x-musicbox-settings'] === '1'
+          const { values } = request.postDataJSON() as { values: Record<string, string | boolean | number | null> }
+          state.settingsWrites.push({ values, guarded })
+          if (!guarded) return json({ detail: 'This request must come from the MusicBox app.' }, 403)
+          for (const [key, value] of Object.entries(values))
+            state.settings[key] = value ?? (key === 'YOUTUBE_API_KEY' ? '' : state.settings[key])
+        }
+        return json(settingsResponse(state.settings))
+      }
+      if (path === '/api/settings/youtube-key-check')
+        return json({ ok: true, message: 'The key works.' })
       if (path === '/api/discord-presence/activity') {
         if (request.method() === 'PUT') {
           await new Promise((resolve) =>
@@ -233,6 +288,7 @@ export async function mockLibrary(page: Page) {
             contentType: 'text/vtt',
             body: captionsFor(song.title),
           })
+        if (part === 'comments') return json({ items: [], next_page_token: null, disabled: false, total: 0 })
         return json(videoDetails(song))
       }
       if (path.startsWith('/api/channels/')) {

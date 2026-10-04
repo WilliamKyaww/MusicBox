@@ -38,6 +38,8 @@ def main() -> None:
     if len(token) < 32:
         raise RuntimeError("Missing desktop session token.")
     load_dotenv(args.config_file, override=True)
+    # The Settings page saves changes back to this same file.
+    os.environ["MUSICBOX_CONFIG_FILE"] = str(args.config_file.resolve())
     # Managed paths and session credentials take precedence over user settings.
     os.environ["MUSICBOX_DESKTOP_TOKEN"] = token
     os.environ["MUSICBOX_AUTH_USERNAME"] = ""

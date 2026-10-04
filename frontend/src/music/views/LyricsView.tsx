@@ -9,7 +9,7 @@ import { ArtistLink } from '../TrackList'
 export function LyricsView() {
   const { currentVideo } = useMusic()
   const hue = currentVideo ? hueFor(currentVideo.channel_title || currentVideo.id) : 200
-  useStickyHeader({ title: currentVideo ? `Lyrics: ${currentVideo.title}` : 'Lyrics', hue })
+  useStickyHeader({ title: currentVideo ? `Lyrics: ${currentVideo.title}` : 'Lyrics', hue, threshold: 120 })
   return (
     <div className="music-lyrics" style={hueStyle(hue)}>
       {currentVideo ? (

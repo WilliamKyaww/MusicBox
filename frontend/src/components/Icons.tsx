@@ -377,6 +377,10 @@ export function ChevronLeftIcon({ className }: IconProps) {
   return <FilledIcon className={className} d="m14.6 18.4-6.4-6.4 6.4-6.4 1.4 1.4-5 5 5 5-1.4 1.4Z" />
 }
 
+export function ArrowLeftIcon({ className }: IconProps) {
+  return <FilledIcon className={className} d="M21 11H6.83l3.58-3.59L9 6l-6 6 6 6 1.41-1.41L6.83 13H21v-2Z" />
+}
+
 export function FilterIcon({ className }: IconProps) {
   return <FilledIcon className={className} d="M3 6h18v2H3V6Zm3 5h12v2H6v-2Zm4 5h4v2h-4v-2Z" />
 }

@@ -20,13 +20,15 @@ export function ExperienceSwitcher({ active }: { active: Experience }) {
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             {mode === 'video' ? (
-              <path d="M8 5v14l12-7Z" fill="currentColor" />
+              <path d="M8 5.5v13l10.5-6.5Z" fill="currentColor" />
             ) : (
               <path
-                d="M9 17V5l11-2v12M9 8l11-2M9 17c0 2-6 4-6 1s6-4 6-1Zm11-2c0 2-6 4-6 1s6-4 6-1Z"
+                d="M9 17V6l10-2v11M9 17a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Zm10-2a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
             )}
           </svg>

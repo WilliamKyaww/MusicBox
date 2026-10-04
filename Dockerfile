@@ -32,6 +32,8 @@ ENV DOWNLOADS_DIR=/app/data/downloads
 ENV PLAYLISTS_DIR=/app/data/playlists
 ENV EXPORTS_DIR=/app/data/exports
 ENV MAX_CONCURRENT_DOWNLOADS=1
+# Hosted copies take their settings from the host's environment variables.
+ENV MUSICBOX_SETTINGS_READ_ONLY=true
 ENV PO_TOKEN_SERVER_URL=http://127.0.0.1:4416
 
 WORKDIR /app

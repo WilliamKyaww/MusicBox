@@ -235,28 +235,6 @@ export function Shelf({
   )
 }
 
-export function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (checked: boolean) => void
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      className="music-switch"
-      onClick={() => onChange(!checked)}
-    >
-      <span />
-    </button>
-  )
-}
 
 export function Skeleton({ count = 6 }: { count?: number }) {
   return (

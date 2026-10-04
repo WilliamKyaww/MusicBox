@@ -5,6 +5,7 @@ import {
   updateDiscordPresenceActivity,
 } from '../api/discordPresence'
 import {
+  CloseIcon,
   NextIcon,
   PauseIcon,
   PlayIcon,
@@ -525,7 +526,7 @@ export function AudioPlayer({
         aria-label="Close player"
         title="Close player"
       >
-        {variant === 'music' ? <MusicIcon name="close" /> : 'x'}
+        {variant === 'music' ? <MusicIcon name="close" /> : <CloseIcon className="yt-icon audio-player__close-icon" />}
       </button>
     </div>,
     document.body,

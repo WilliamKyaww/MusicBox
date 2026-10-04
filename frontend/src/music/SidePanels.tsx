@@ -127,10 +127,10 @@ export function NowPlayingPanel({ onClose }: { onClose: () => void }) {
             className="music-panel__about-image"
             style={{ backgroundImage: `url("${info?.banner_url ?? avatar}")` }}
           >
-            <span>About the artist</span>
+            <span>About the Artist</span>
           </div>
         ) : (
-          <h3>About the artist</h3>
+          <h3>About the Artist</h3>
         )}
         <div className="music-panel__about-body">
           <button
@@ -181,7 +181,7 @@ export function NowPlayingPanel({ onClose }: { onClose: () => void }) {
             <div>
               <dt>Released</dt>
               <dd>
-                {new Date(details.data.published_at).toLocaleDateString('en-US', {
+                {new Date(details.data.published_at).toLocaleDateString('en-GB', {
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric',
@@ -215,7 +215,7 @@ export function NowPlayingPanel({ onClose }: { onClose: () => void }) {
       {upNext ? (
         <section className="music-panel__card">
           <div className="music-panel__card-heading">
-            <h3>Next in queue</h3>
+            <h3>Next in Queue</h3>
             <button
               type="button"
               className="music-text-button"
@@ -378,7 +378,7 @@ export function QueuePanel({ onClose }: { onClose: () => void }) {
               Queue
             </button>
             <button type="button" role="tab" aria-selected={tab === 'recent'} onClick={() => setTab('recent')}>
-              Recently played
+              Recently Played
             </button>
           </span>
         }
@@ -433,7 +433,7 @@ export function QueuePanel({ onClose }: { onClose: () => void }) {
           </div>
           {current ? (
             <section className="music-panel__section">
-              <h3>Now playing</h3>
+              <h3>Now Playing</h3>
               <div className="music-queue-current">
                 <Artwork src={current.thumbnailUrl} name={current.title} />
                 <span>
@@ -447,7 +447,7 @@ export function QueuePanel({ onClose }: { onClose: () => void }) {
           {sections.queued.length ? (
             <section className="music-panel__section">
               <div className="music-panel__card-heading">
-                <h3>Next in queue</h3>
+                <h3>Next in Queue</h3>
                 <button type="button" className="music-text-button" onClick={music.queue.clear}>
                   Clear queue
                 </button>
@@ -480,7 +480,7 @@ export function QueuePanel({ onClose }: { onClose: () => void }) {
           {!upcoming.length ? (
             <div className="music-empty">
               <MusicIcon name="queue" />
-              <h3>Add to your queue</h3>
+              <h3>Add to Your Queue</h3>
               <p>Tap "Add to queue" in a song's menu to see it here.</p>
             </div>
           ) : null}

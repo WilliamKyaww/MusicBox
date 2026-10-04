@@ -1,10 +1,13 @@
 /** Display formatting that mirrors how YouTube labels counts, dates and times. */
 
-const compactFormatter = new Intl.NumberFormat('en', {
+// British English formatting throughout, e.g. "3 Oct 2026".
+const LOCALE = 'en-GB'
+
+const compactFormatter = new Intl.NumberFormat(LOCALE, {
   notation: 'compact',
   maximumFractionDigits: 1,
 })
-const fullFormatter = new Intl.NumberFormat('en')
+const fullFormatter = new Intl.NumberFormat(LOCALE)
 
 export function formatCompact(value: number) {
   return compactFormatter.format(value)
@@ -55,7 +58,7 @@ export function formatDate(isoDate: string | null | undefined) {
   if (!isoDate) return null
   const timestamp = Date.parse(isoDate)
   if (Number.isNaN(timestamp)) return null
-  return new Date(timestamp).toLocaleDateString('en', {
+  return new Date(timestamp).toLocaleDateString(LOCALE, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -84,4 +87,17 @@ export function formatPreciseClock(totalSeconds: number) {
 /** Joins the non-empty parts of a metadata line with YouTube's middle dot. */
 export function joinMeta(...parts: (string | null | undefined | false)[]) {
   return parts.filter(Boolean).join(' • ')
+}
+
+/** `1536` -> `1.5 KB`; null when the size is unknown. */
+export function formatFileSize(bytes: number | null | undefined) {
+  if (!bytes || bytes <= 0) return null
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = bytes
+  let unit = 0
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024
+    unit += 1
+  }
+  return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
 }

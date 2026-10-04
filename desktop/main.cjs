@@ -90,7 +90,7 @@ async function launch() {
     backgroundColor: '#111318', icon: path.join(__dirname, 'assets/icon.png'), show: false,
     webPreferences: {
       session: ownSession, contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true,
-      // The split audio/video player synchronizes on a timer, even when minimized.
+      // The split audio/video player synchronises on a timer, even when minimised.
       backgroundThrottling: false,
     },
   })

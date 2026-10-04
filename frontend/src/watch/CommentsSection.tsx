@@ -100,7 +100,7 @@ export function CommentsSection({
   return (
     <section className="comments" ref={sectionRef}>
       <header className="comments__header">
-        <h2>{total !== null ? `${total.toLocaleString('en')} Comments` : 'Comments'}</h2>
+        <h2>{total !== null ? `${total.toLocaleString('en-GB')} Comments` : 'Comments'}</h2>
         <div className="comments__sort">
           <SortIcon className="yt-icon" />
           <select

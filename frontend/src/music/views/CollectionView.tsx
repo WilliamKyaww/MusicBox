@@ -155,7 +155,7 @@ export function CollectionView({
           empty: (
             <EmptyState
               icon="heart"
-              title="Songs you like will appear here"
+              title="Songs You Like Will Appear Here"
               text="Save songs by tapping the plus icon."
               action={
                 <button
@@ -174,7 +174,7 @@ export function CollectionView({
           kind: 'recent',
           id: 'recent',
           type: 'Your history',
-          title: 'Recently played',
+          title: 'Recently Played',
           description: 'Everything you played here, newest first. Private sessions are not recorded.',
           hue: 205,
           art: <Artwork name="Recently played" icon="clock" hue={205} />,
@@ -185,7 +185,7 @@ export function CollectionView({
           empty: (
             <EmptyState
               icon="clock"
-              title="Nothing played yet"
+              title="Nothing Played Yet"
               text="Songs you listen to will show up here."
             />
           ),
@@ -207,7 +207,7 @@ export function CollectionView({
           empty: (
             <EmptyState
               icon="repeat"
-              title="Nothing on repeat yet"
+              title="Nothing on Repeat Yet"
               text="Play a song a few times and it will show up here."
             />
           ),
@@ -242,7 +242,7 @@ export function CollectionView({
           ) : (
             <EmptyState
               icon="radio"
-              title="Couldn't build this mix"
+              title="Couldn't Build This Mix"
               text={mix.error ?? 'YouTube returned no songs for it.'}
             />
           ),
@@ -278,7 +278,7 @@ export function CollectionView({
           empty: (
             <EmptyState
               icon="download"
-              title="No downloaded songs yet"
+              title="No Downloaded Songs Yet"
               text="Choose Download from a song's menu to keep it on this computer."
             />
           ),
@@ -301,7 +301,7 @@ export function CollectionView({
     return (
       <EmptyState
         icon="music"
-        title="Playlist not found"
+        title="Playlist Not Found"
         text="It may have been deleted. Your other playlists are in Your Library."
       />
     )
@@ -544,7 +544,7 @@ export function CollectionView({
       {info.tracks.length && !shown.length ? (
         <EmptyState
           icon="search"
-          title={`Couldn't find "${filter || artistChip}"`}
+          title={`Couldn't Find "${filter || artistChip}"`}
           text="Try searching again using a different spelling or keyword."
         />
       ) : (
@@ -581,13 +581,13 @@ export function CollectionView({
       {playlist && playlist.items.length ? <Recommended playlist={playlist} /> : null}
       {playlist ? (
         <details className="music-export">
-          <summary>Download or export this playlist</summary>
+          <summary>Download or Export This Playlist</summary>
           {exportsPanel}
         </details>
       ) : null}
       {route.view === 'downloads' ? (
         <section className="music-manage">
-          <h2>Manage downloads</h2>
+          <h2>Manage Downloads</h2>
           {downloadsPanel}
         </section>
       ) : null}
@@ -698,7 +698,7 @@ function PlaylistSearch({ playlist }: { playlist: Playlist }) {
   const inPlaylist = new Set(playlist.items.map((item) => item.video_id))
   return (
     <section className="music-playlist-search">
-      <h2>Let's find something for your playlist</h2>
+      <h2>Let's Find Something for Your Playlist</h2>
       <label className="music-filter music-filter--wide has-value">
         <MusicIcon name="search" />
         <input

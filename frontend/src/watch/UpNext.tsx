@@ -13,7 +13,7 @@ type UpNextProps = {
 
 export function UpNext({ label, videos, autoplay, onToggleAutoplay, isLoading }: UpNextProps) {
   return (
-    <section className="up-next" aria-label="Up next">
+    <section className="up-next" aria-label="Up Next">
       <header className="up-next__header">
         <h2>{label}</h2>
         <button

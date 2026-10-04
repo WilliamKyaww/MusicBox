@@ -167,7 +167,12 @@ async def _fetch_json(
     url: str,
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    response = await client.get(url, params=params)
+    # The key travels in a header rather than the URL, so it never appears in
+    # request logs or in error messages that quote the URL.
+    query = dict(params)
+    api_key = query.pop("key", None)
+    headers = {"X-Goog-Api-Key": str(api_key)} if api_key else None
+    response = await client.get(url, params=query, headers=headers)
 
     if response.status_code >= 400:
         detail = _extract_google_error(response)
@@ -199,7 +204,7 @@ def _require_api_key() -> str:
     api_key = get_settings().youtube_api_key
     if not api_key:
         raise YouTubeConfigError(
-            "YouTube search is not configured yet. Add `YOUTUBE_API_KEY` to `backend/.env`."
+            "YouTube search needs an API key. Add your YouTube Data API key in Settings."
         )
     return api_key
 

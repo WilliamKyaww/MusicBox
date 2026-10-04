@@ -1,11 +1,11 @@
 @echo off
-rem One-click launcher: starts the backend and frontend, then opens the web app.
+rem One-click launcher: sets MusicBox up on first run, starts the backend and
+rem frontend, then opens the web app.
 title MusicBox Launcher
 cd /d "%~dp0"
 
-if not exist "backend\.venv\Scripts\python.exe" (
-    echo Backend virtual environment not found at backend\.venv
-    echo Create it and run: pip install -r backend\requirements.txt
+call "%~dp0backend\setup.cmd"
+if errorlevel 1 (
     pause
     exit /b 1
 )
@@ -31,9 +31,10 @@ start "MusicBox Backend" /min /d "%~dp0backend" cmd /k .venv\Scripts\python -m u
 start "MusicBox Frontend" /min /d "%~dp0frontend" cmd /k npm run dev
 
 echo Waiting for MusicBox to start...
-powershell -NoProfile -Command "$deadline = (Get-Date).AddSeconds(60); while ((Get-Date) -lt $deadline) { try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://localhost:5173 | Out-Null; exit 0 } catch { Start-Sleep -Milliseconds 500 } }; exit 1"
+rem Checking health through the frontend's proxy only passes once both halves are up.
+powershell -NoProfile -Command "$deadline = (Get-Date).AddSeconds(90); while ((Get-Date) -lt $deadline) { try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://localhost:5173/api/health | Out-Null; exit 0 } catch { Start-Sleep -Milliseconds 500 } }; exit 1"
 if errorlevel 1 (
-    echo MusicBox did not start within 60 seconds. Check the minimized MusicBox windows for errors.
+    echo MusicBox did not start within 90 seconds. Check the minimised MusicBox windows for errors.
     pause
     exit /b 1
 )

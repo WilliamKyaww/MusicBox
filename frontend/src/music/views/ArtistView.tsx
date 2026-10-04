@@ -76,7 +76,7 @@ export function ArtistView({ route }: { route: MusicRoute }) {
     return (
       <div className="music-empty">
         <MusicIcon name="artist" />
-        <h3>Couldn't load this artist</h3>
+        <h3>Couldn't Load This Artist</h3>
         <p>{error}</p>
       </div>
     )
@@ -243,7 +243,7 @@ export function ArtistView({ route }: { route: MusicRoute }) {
       ) : null}
 
       {latest.length ? (
-        <Shelf title="Latest uploads">
+        <Shelf title="Latest Uploads">
           {latest.map((video, index) => (
             <Card
               key={video.id}

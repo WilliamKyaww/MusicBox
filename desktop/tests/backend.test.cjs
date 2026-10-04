@@ -47,6 +47,45 @@ test('desktop backend binds its own port, requires its session token, serves the
   assert.match(await html.text(), /MusicBox/)
   const discord = await fetch(service.baseUrl + '/api/discord-presence', { headers })
   assert.equal((await discord.json()).enabled, false)
+
+  // The Settings page saves to the desktop config file and never returns secrets.
+  const settingsUrl = service.baseUrl + '/api/settings'
+  const put = (values, extra = { 'X-MusicBox-Settings': '1' }) => fetch(settingsUrl, {
+    method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json', ...extra }, body: JSON.stringify({ values }),
+  })
+  const before = await (await fetch(settingsUrl, { headers })).json()
+  assert.equal(before.read_only_reason, null)
+  assert.equal(path.resolve(before.config_file), path.resolve(configFile))
+  assert.deepEqual(before.fields.find((f) => f.key === 'YOUTUBE_API_KEY'), {
+    ...before.fields.find((f) => f.key === 'YOUTUBE_API_KEY'), is_set: false, value: null,
+  })
+  const apiKey = 'AIzaTest' + 'k'.repeat(31)
+  assert.equal((await put({ YOUTUBE_API_KEY: apiKey }, {})).status, 403)
+  const invalid = await put({ YOUTUBE_API_KEY: 'not a key!' })
+  assert.equal(invalid.status, 400)
+  assert.doesNotMatch(JSON.stringify(await invalid.json()), /not a key/)
+  const cookies = 'C:\\Users\\me\\My cookies.txt'
+  const saved = await put({ YOUTUBE_API_KEY: apiKey, DISCORD_PRESENCE_ENABLED: true, YOUTUBE_COOKIES_FILE: cookies, MAX_CONCURRENT_DOWNLOADS: 3 })
+  const savedText = await saved.text()
+  assert.equal(saved.status, 200, savedText)
+  assert.doesNotMatch(savedText, new RegExp(apiKey))
+  const fields = Object.fromEntries(JSON.parse(savedText).fields.map((f) => [f.key, f]))
+  assert.equal(fields.YOUTUBE_API_KEY.is_set, true)
+  assert.equal(fields.YOUTUBE_API_KEY.value, null)
+  assert.equal(fields.YOUTUBE_COOKIES_FILE.value, cookies)
+  assert.equal(fields.MAX_CONCURRENT_DOWNLOADS.value, 3)
+  const file = fs.readFileSync(configFile, 'utf8')
+  assert.match(file, new RegExp(`^YOUTUBE_API_KEY=${apiKey}$`, 'm'))
+  assert.match(file, /^PO_TOKEN_SERVER_URL=$/m)
+  // Discord reads its settings live, so enabling it needs no restart.
+  assert.equal((await (await fetch(service.baseUrl + '/api/discord-presence', { headers })).json()).enabled, true)
+  const cleared = await put({ YOUTUBE_API_KEY: null })
+  assert.equal((await cleared.json()).fields.find((f) => f.key === 'YOUTUBE_API_KEY').is_set, false)
+  assert.doesNotMatch(fs.readFileSync(configFile, 'utf8'), /YOUTUBE_API_KEY/)
+  const check = await fetch(settingsUrl + '/youtube-key-check', {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'X-MusicBox-Settings': '1' }, body: '{}',
+  })
+  assert.deepEqual(await check.json(), { ok: false, message: 'No YouTube API key has been saved yet.' })
   await service.stop()
   service = null
   await assert.rejects(fetch(health.url, { headers, signal: AbortSignal.timeout(1000) }))

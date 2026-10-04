@@ -102,7 +102,7 @@ export function ClipPanel({
       <header className="clip-panel__header">
         <ScissorsIcon className="yt-icon" />
         <div>
-          <h2>Download a section</h2>
+          <h2>Download a Section</h2>
           <p>
             Drag the blue handles on the progress bar, type a time, or mark the spot while
             watching.

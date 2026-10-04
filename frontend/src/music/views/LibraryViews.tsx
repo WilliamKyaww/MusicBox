@@ -5,6 +5,7 @@ import { useLibrary } from '../../library'
 import { navigate } from '../../router'
 import type { SpotifyPlaylistPreview } from '../../types'
 import { playlistVideo, sortedItems } from '../helpers'
+import { useStickyHeader } from '../hooks'
 import { useMusic } from '../MusicContext'
 import { getPlaybackControls, usePlayback } from '../playback'
 import { useMusicStore } from '../store'
@@ -12,6 +13,7 @@ import { Artwork, Card, Mosaic } from '../ui'
 
 export function PlaylistsView() {
   const music = useMusic()
+  useStickyHeader({ title: 'Playlists', hue: null, threshold: 72 })
   const store = useMusicStore()
   const isPlaying = usePlayback((state) => state.isPlaying)
   const context = music.session?.context
@@ -60,7 +62,7 @@ export function PlaylistsView() {
       </div>
       {!music.playlists.length ? (
         <div className="music-empty">
-          <h2>Create your first playlist</h2>
+          <h2>Create Your First Playlist</h2>
           <p>It's easy, we'll help you.</p>
         </div>
       ) : null}
@@ -69,6 +71,7 @@ export function PlaylistsView() {
 }
 
 export function ArtistsView() {
+  useStickyHeader({ title: 'Artists', hue: null, threshold: 72 })
   const subscriptions = useLibrary((state) => state.subscriptions)
   return (
     <div className="music-page music-page--padded">
@@ -88,7 +91,7 @@ export function ArtistsView() {
       </div>
       {!subscriptions.length ? (
         <div className="music-empty">
-          <h2>Follow your first artist</h2>
+          <h2>Follow Your First Artist</h2>
           <p>Open an artist from any song and press Follow.</p>
         </div>
       ) : null}
@@ -97,9 +100,10 @@ export function ArtistsView() {
 }
 
 export function ImportsView({ importsPanel }: { importsPanel: ReactNode }) {
+  useStickyHeader({ title: 'Import & Export', hue: null, threshold: 72 })
   return (
     <div className="music-page music-page--padded">
-      <h1>Import &amp; export</h1>
+      <h1>Import &amp; Export</h1>
       <p className="music-muted">
         Bring playlists in from Spotify or YouTube, or download YouTube playlists as files.
       </p>
@@ -116,7 +120,7 @@ function SpotifyPreview() {
   const [error, setError] = useState('')
   return (
     <section className="music-import">
-      <h2>Spotify playlist preview</h2>
+      <h2>Spotify Playlist Preview</h2>
       <p>
         Reads a public Spotify playlist's track list, without playing it from Spotify. Pick the
         YouTube version of each song yourself.

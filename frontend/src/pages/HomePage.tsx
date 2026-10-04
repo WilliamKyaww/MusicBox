@@ -32,17 +32,17 @@ export function HomePage() {
       {continueWatching.length > 0 ? (
         <section className="home-section">
           <header className="home-section__header">
-            <h2>Continue watching</h2>
+            <h2>Continue Watching</h2>
             <a href={paths.history()}>History</a>
           </header>
-          <VideoGrid videos={continueWatching} queueLabel="Continue watching" />
+          <VideoGrid videos={continueWatching} queueLabel="Continue Watching" />
         </section>
       ) : null}
 
       {channelIds.length > 0 ? (
         <section className="home-section">
           <header className="home-section__header">
-            <h2>Latest from your subscriptions</h2>
+            <h2>Latest from Your Subscriptions</h2>
             <a href={paths.subscriptions()}>View all</a>
           </header>
           {subscriptionFeed.isLoading && !subscriptionFeed.data ? (
@@ -59,11 +59,11 @@ export function HomePage() {
         </header>
         {trending.isLoading && !trending.data ? <VideoGridSkeleton /> : null}
         {trending.error ? (
-          <StatusPanel tone="error" title="Trending could not load" body={trending.error} />
+          <StatusPanel tone="error" title="Trending Couldn't Load" body={trending.error} />
         ) : null}
         {trending.data && !trending.data.available ? (
           <StatusPanel
-            title="Search to get started"
+            title="Search to Get Started"
             body={
               trending.data.message ??
               'Trending videos need a YouTube API key. Channels and videos still work.'

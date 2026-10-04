@@ -112,7 +112,7 @@ test('playlist creation, editing, folders and pins survive view changes', async 
   ).toBeVisible()
   // An empty playlist offers Spotify's "find something for your playlist" search.
   await expect(
-    page.getByRole('heading', { name: "Let's find something for your playlist" }),
+    page.getByRole('heading', { name: "Let's Find Something for Your Playlist" }),
   ).toBeVisible()
   await playlistMenu(page, 'Road trip', 'Pin playlist')
   await page
@@ -259,7 +259,7 @@ test('search, more menu and play-next use real shared actions', async ({
   )
   await page.goto('/#/music/search')
   await expect(
-    page.getByRole('heading', { name: 'Recent searches', exact: true }),
+    page.getByRole('heading', { name: 'Recent Searches', exact: true }),
   ).toBeVisible()
   await expect(page.getByRole('link', { name: 'Tycho', exact: true })).toBeVisible()
 })
@@ -350,7 +350,7 @@ test('private listening clears activity after an in-flight Discord update comple
     .poll(() => data.calls.includes('PUT /api/discord-presence/activity'))
     .toBe(true)
   await page
-    .getByRole('link', { name: 'Listening settings', exact: true })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click()
   await page.getByRole('switch', { name: 'Private session', exact: true }).click()
   await expect.poll(() => data.completedPresence.includes('PUT')).toBe(true)
@@ -370,7 +370,7 @@ test('timed sleep pauses playback and resets the timer', async ({ page }) => {
     .toBeGreaterThan(0.1)
   await page.clock.install()
   await page
-    .getByRole('link', { name: 'Listening settings', exact: true })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click()
   await page.getByLabel('Sleep timer', { exact: true }).selectOption('15')
   await page.clock.fastForward(15 * 60000 + 1)
@@ -398,10 +398,10 @@ test('desktop music layout and mobile layouts do not overflow', async ({
   )
   await page.goto('/#/music/home')
   await expect(
-    page.getByRole('heading', { name: 'Recently played', exact: true }),
+    page.getByRole('heading', { name: 'Recently Played', exact: true }),
   ).toBeVisible()
   await expect(
-    page.getByRole('heading', { name: 'Made for you', exact: true }),
+    page.getByRole('heading', { name: 'Made for You', exact: true }),
   ).toBeVisible()
   await page.screenshot({
     path: testInfo.outputPath('music-desktop.png'),
@@ -500,12 +500,12 @@ test('queue shows Next in queue before the playlist, clears, and autoplays simil
   await songMenu(page, 'A Walk', 'Add to queue')
   await player(page).getByRole('button', { name: 'Queue', exact: true }).click()
   const queue = page.getByRole('complementary', { name: 'Play queue' })
-  await expect(queue.getByRole('heading', { name: 'Next in queue' })).toBeVisible()
+  await expect(queue.getByRole('heading', { name: 'Next in Queue' })).toBeVisible()
   await expect(queue.getByRole('heading', { name: 'Next from: Night drive' })).toBeVisible()
   await expect(queue.locator('.music-queue-track').nth(0)).toContainText('Nights')
   await expect(queue.locator('.music-queue-track').nth(1)).toContainText('A Walk')
   await queue.getByRole('button', { name: 'Clear queue', exact: true }).click()
-  await expect(queue.getByRole('heading', { name: 'Next in queue' })).toHaveCount(0)
+  await expect(queue.getByRole('heading', { name: 'Next in Queue' })).toHaveCount(0)
   await expect(queue.locator('.music-queue-track')).toHaveCount(5)
   // Starting the last song lines up recommendations so the music keeps going.
   await page.getByRole('button', { name: 'Play Innerbloom', exact: true }).click()
@@ -572,7 +572,7 @@ test('song radio, full screen, keyboard shortcuts and the Now Playing view', asy
   await page.keyboard.press('Alt+Shift+B')
   await expect(page.getByText('Added to Liked Songs.')).toBeVisible()
   await page.keyboard.press('Control+/')
-  await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeVisible()
   await page.keyboard.press('Escape')
   const audio = page.locator('.audio-player audio')
   await expect
