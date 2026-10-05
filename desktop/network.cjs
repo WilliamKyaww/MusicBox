@@ -43,6 +43,13 @@ async function proxyDesktopRequest(request, backendOrigin, token, localFetch) {
       if (value) headers.set(name, value)
     }
     headers.set('X-MusicBox-Desktop', token)
+    // Only Settings writes need this guard; never attach it to media requests.
+    if (target.origin === backendOrigin && target.pathname === source.pathname &&
+        ((method === 'PUT' && source.pathname === '/api/settings') ||
+         (method === 'POST' && source.pathname === '/api/settings/youtube-key-check'))) {
+      const guard = request.headers.get('X-MusicBox-Settings')
+      if (guard) headers.set('X-MusicBox-Settings', guard)
+    }
     // Chromium net.fetch cancels manual redirects; Node fetch can inspect them.
     const response = await localFetch(target.href, {
       method, headers, body: ['GET', 'HEAD'].includes(method) ? undefined : body,

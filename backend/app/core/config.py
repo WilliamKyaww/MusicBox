@@ -9,6 +9,10 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
     app_name: str = "MusicBox API"
+    movies_enabled: bool = Field(default=False, alias="MOVIES_ENABLED")
+    movies_data_dir: Path = Field(
+        default=BACKEND_DIR / "data" / "movies", alias="MOVIES_DATA_DIR"
+    )
     frontend_origin: str = Field(
         default="http://localhost:5173",
         alias="FRONTEND_ORIGIN",

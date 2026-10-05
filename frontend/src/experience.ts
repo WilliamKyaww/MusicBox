@@ -1,4 +1,6 @@
-export type Experience = 'video' | 'music'
+import { moviesPath, parseMoviesRoute } from './movies/routes.ts'
+
+export type Experience = 'video' | 'music' | 'movies'
 export type MusicView =
   | 'home'
   | 'search'
@@ -91,7 +93,7 @@ export function artistPath(channelId: string, videoId = '') {
 }
 
 export function rememberExperience(hash: string) {
-  const mode = parseMusicRoute(hash) ? 'music' : 'video'
+  const mode = parseMoviesRoute(hash) ? 'movies' : parseMusicRoute(hash) ? 'music' : 'video'
   try {
     localStorage.setItem(KEY, mode)
     localStorage.setItem(`${KEY}-${mode}-route`, hash || '#/')
@@ -101,10 +103,11 @@ export function rememberExperience(hash: string) {
 }
 
 export function experiencePath(mode: Experience) {
-  const fallback = mode === 'music' ? musicPath() : '#/'
+  const fallback = mode === 'movies' ? moviesPath() : mode === 'music' ? musicPath() : '#/'
   try {
     const saved = localStorage.getItem(`${KEY}-${mode}-route`)
     if (!saved?.startsWith('#/')) return fallback
+    if (Boolean(parseMoviesRoute(saved)) !== (mode === 'movies')) return fallback
     if (Boolean(parseMusicRoute(saved)) !== (mode === 'music')) return fallback
     // Returning to a view must not auto-start a video over the persistent audio player.
     if (mode === 'video' && saved.startsWith('#/watch')) return '#/'
@@ -117,8 +120,9 @@ export function experiencePath(mode: Experience) {
 export function restoreExperience() {
   if (window.location.hash) return
   try {
-    if (localStorage.getItem(KEY) === 'music')
-      window.history.replaceState(null, '', experiencePath('music'))
+    const mode = localStorage.getItem(KEY)
+    if (mode === 'music' || mode === 'movies')
+      window.history.replaceState(null, '', experiencePath(mode))
   } catch {
     /* Explicit links still work without storage. */
   }

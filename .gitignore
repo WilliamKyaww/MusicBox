@@ -19,6 +19,7 @@ frontend/.env
 backend/data/downloads/
 backend/data/playlists/
 backend/data/exports/
+backend/data/movies/
 backend/data/discord-thumbnails/
 markdown/
 .tmp/

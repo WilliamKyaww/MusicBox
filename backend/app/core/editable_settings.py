@@ -46,9 +46,20 @@ GROUPS: dict[str, str] = {
     "spotify": "Spotify Import",
     "discord": "Discord",
     "downloads": "Downloads",
+    "movies": "Movies",
 }
 
 SPECS: tuple[SettingSpec, ...] = (
+    SettingSpec(
+        key="MOVIES_ENABLED",
+        label="Movies experience",
+        group="movies",
+        kind="boolean",
+        description=(
+            "Show the Movies preview alongside Video and Music. "
+            "Catalogue access and movie playback are not available yet."
+        ),
+    ),
     SettingSpec(
         key="YOUTUBE_API_KEY",
         label="YouTube Data API Key",

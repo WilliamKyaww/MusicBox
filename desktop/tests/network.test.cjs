@@ -2,6 +2,36 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { desktopRequestHeaders, proxyDesktopRequest } = require('../network.cjs')
 
+test('Settings writes forward the guard only to their local endpoint', async () => {
+  for (const [route, method, expected] of [
+    ['/api/settings', 'PUT', '1'],
+    ['/api/settings/youtube-key-check', 'POST', '1'],
+    ['/api/settings', 'GET', null],
+    ['/api/movies/status', 'GET', null],
+    ['/api/stream/test', 'GET', null],
+  ]) {
+    const request = new Request('musicbox://app' + route, {
+      method, headers: { 'X-MusicBox-Settings': '1' },
+    })
+    await proxyDesktopRequest(request, 'http://127.0.0.1:49152', 'private-token', async (_url, options) => {
+      assert.equal(options.headers.get('X-MusicBox-Settings'), expected)
+      return new Response('{}')
+    })
+  }
+})
+
+test('Settings guard is not propagated to a redirected endpoint', async () => {
+  let calls = 0
+  await proxyDesktopRequest(new Request('musicbox://app/api/settings', {
+    method: 'PUT', headers: { 'X-MusicBox-Settings': '1' },
+  }), 'http://127.0.0.1:49152', 'private-token', async (_url, options) => {
+    calls += 1
+    assert.equal(options.headers.get('X-MusicBox-Settings'), calls === 1 ? '1' : null)
+    return calls === 1 ? new Response(null, { status: 307, headers: { location: '/api/other' } }) : new Response('{}')
+  })
+  assert.equal(calls, 2)
+})
+
 test('YouTube embeds receive the desktop application identity', () => {
   const headers = desktopRequestHeaders('https://www.youtube-nocookie.com/embed/KvMY1uzSC1E', { referer: 'musicbox://app/' }, 'http://127.0.0.1:49152', 'private-token')
   assert.equal(headers.Referer, 'https://com.williamkyaww.musicbox/')

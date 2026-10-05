@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { backendLaunchOptions, startBackend } = require('../backend.cjs')
+const { proxyDesktopRequest } = require('../network.cjs')
 
 test('missing backend fails with an actionable error', () => {
   assert.throws(() => backendLaunchOptions({ packaged: true, resourcesPath: path.join(os.tmpdir(), 'missing-musicbox-resources') }), /Backend executable not found/)
@@ -86,6 +87,21 @@ test('desktop backend binds its own port, requires its session token, serves the
     method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'X-MusicBox-Settings': '1' }, body: '{}',
   })
   assert.deepEqual(await check.json(), { ok: false, message: 'No YouTube API key has been saved yet.' })
+  const moviesUrl = service.baseUrl + '/api/movies/status'
+  assert.equal((await (await fetch(moviesUrl, { headers })).json()).enabled, false)
+  assert.equal((await put({ MOVIES_ENABLED: true }, {})).status, 403)
+  for (const enabled of [true, false]) {
+    const changed = await proxyDesktopRequest(new Request('musicbox://app/api/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-MusicBox-Settings': '1' },
+      body: JSON.stringify({ values: { MOVIES_ENABLED: enabled } }),
+    }), service.baseUrl, token, fetch)
+    assert.equal(changed.status, 200)
+    const movies = await (await fetch(moviesUrl, { headers })).json()
+    assert.equal(movies.enabled, enabled)
+    assert.equal(movies.playback_available, false)
+    assert.equal(movies.catalogue_available, false)
+  }
+  assert.equal(fs.existsSync(path.join(tempDir, 'data/movies')), false)
   await service.stop()
   service = null
   await assert.rejects(fetch(health.url, { headers, signal: AbortSignal.timeout(1000) }))

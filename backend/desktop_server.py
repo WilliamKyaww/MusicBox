@@ -48,6 +48,7 @@ def main() -> None:
         ("DOWNLOADS_DIR", "downloads"),
         ("PLAYLISTS_DIR", "playlists"),
         ("EXPORTS_DIR", "exports"),
+        ("MOVIES_DATA_DIR", "movies"),
         ("DISCORD_THUMBNAILS_DIR", "discord-thumbnails"),
     ):
         os.environ[setting] = str(args.data_dir.resolve() / directory)

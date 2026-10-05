@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { parseMusicRoute, type MusicRoute } from './experience'
+import { parseMoviesRoute, type MoviesRoute } from './movies/routes'
 import { DEFAULT_SEARCH_FILTERS } from './api/search'
 import type {
   ChannelTab,
@@ -14,6 +15,7 @@ import type {
  * without any server-side routing for the static build.
  */
 export type Route =
+  | MoviesRoute
   | MusicRoute
   | { name: 'home' }
   | { name: 'results'; query: string; filters: SearchFilters }
@@ -46,6 +48,8 @@ function parseStartTime(value: string | null) {
 }
 
 export function parseRoute(hash: string): Route {
+  const moviesRoute = parseMoviesRoute(hash)
+  if (moviesRoute) return moviesRoute
   const musicRoute = parseMusicRoute(hash)
   if (musicRoute) return musicRoute
   const raw = hash.replace(/^#/, '') || '/'

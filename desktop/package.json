@@ -1,7 +1,7 @@
 {
   "name": "musicbox-desktop",
   "productName": "MusicBox",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "MusicBox desktop music and video player",
   "author": "WilliamKyaww",
@@ -31,6 +31,7 @@
       "network.cjs",
       "playback-check.cjs",
       "experience-check.cjs",
+      "movies-check.cjs",
       "package.json",
       "assets/icon.png"
     ],

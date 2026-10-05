@@ -19,6 +19,16 @@ Music view still plays YouTube or your downloaded audio, **not Spotify's streami
 
 This is not full Spotify feature parity. Spotify Connect, Jam, Blend, AI DJ, licensed lyrics for every song, podcasts/audiobooks, account/cloud sync, Smart Shuffle, crossfade, gapless transitions, equaliser and loudness normalisation are not implemented. Search-based features use YouTube API quota, so search waits for a pause in typing. The researched feature inventory is in `docs/spotify-feature-research-2026-10-03.md` (local documentation).
 
+## Movies Preview
+
+An optional third experience is available in **Settings > Connections > Movies experience**. Enabling it adds **Movies** to the shared switch without replacing Video or Music. Movies has its own home and Settings routes; switching to its preview keeps existing audio playing.
+
+This is the **foundation**, not a playable movie catalogue. Search, movie/TV metadata, watchlists, Continue Watching and movie playback are not implemented yet. No movie provider is contacted and no Movies database is created by opening the preview. Metadata access and authorised playback sources will be added through separate gates in `docs/NETFLIX_CLONE_RESEARCH_AND_IMPLEMENTATION_PLAN.md`.
+
+For managed installations set `MOVIES_ENABLED=true`; the default is `false`. The future Movies SQLite store is separate from songs/playlists, under `backend/data/movies` (or `MOVIES_DATA_DIR`) on the web, and the installed desktop app's managed `data/movies` directory. The schema foundation is tested but not activated by this preview. No film rights, accounts, subscriptions or streaming services are bundled.
+
+Movies-specific checks: run `backend/.venv/Scripts/python.exe -m unittest discover -s backend/tests -p test_movies.py` from an environment with `backend` on `PYTHONPATH`, or run `.venv\Scripts\python.exe -m unittest discover -s tests -p test_movies.py` from `backend`. To smoke-test the installed/packaged preview without touching your library or keys, set `MUSICBOX_SMOKE_MOVIES=1` and launch `MusicBox.exe --smoke-test`; this uses disposable configuration and data.
+
 ## Layout
 
 - **Resizable panels.** Drag the divider beside a panel to resize it, as in Spotify's desktop app. In Video, the guide (200–360 px) and the Watch page's Up Next column (320–560 px) resize; in Music, Your Library (280–480 px) and the Now Playing panel (280–480 px) do. Dragging Your Library below 200 px folds it into the icon rail. A focused divider also responds to the arrow keys, Home and End; double-click it or press Enter to restore the default width. Widths are remembered on this device. On narrow windows the Watch page stacks and its divider is hidden, and pages lay out against the space the panels leave, so nothing scrolls sideways.
@@ -49,7 +59,7 @@ backend/
   setup.cmd             Creates backend\.venv and installs or updates packages
   .env.example          Backend environment template
 frontend/
-  src/                  React app: Video pages, Music experience (music/), Settings (settings/)
+  src/                  React app: Video pages, Music (music/), Movies preview (movies/), Settings (settings/)
   e2e/, tests/          Playwright browser tests and Node unit tests
 desktop/                Electron app, packaging scripts and desktop tests
 AGENTS.md               Persistent instructions for contributors and coding agents

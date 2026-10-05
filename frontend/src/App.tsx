@@ -64,6 +64,7 @@ import { VideoActionsContext, type VideoActions, type WatchQueue } from './video
 import { artistPath, musicPath, rememberExperience } from './experience'
 import { recordHistory } from './library'
 import { MusicWorkspace } from './music/MusicWorkspace'
+import { MoviesWorkspace } from './movies/MoviesWorkspace'
 import { MusicIcon } from './music/MusicIcon'
 import type { PlaySource } from './music/MusicContext'
 import { contextPath } from './music/helpers'
@@ -129,6 +130,7 @@ function App() {
   const autoplaySeed = useRef<string | null>(null)
   const music = useMusicStore()
   const isMusic = route.name === 'music'
+  const isMovies = route.name === 'movies'
   const [loopMode, setLoopMode] = useState<LoopMode>('off')
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([])
@@ -235,8 +237,8 @@ function App() {
 
   useEffect(() => {
     rememberExperience(hash)
-    document.documentElement.dataset.experience = isMusic ? 'music' : 'video'
-  }, [hash, isMusic])
+    document.documentElement.dataset.experience = isMovies ? 'movies' : isMusic ? 'music' : 'video'
+  }, [hash, isMusic, isMovies])
 
   useEffect(() => {
     try {
@@ -1343,7 +1345,7 @@ function App() {
 
   return (
     <VideoActionsContext.Provider value={videoActions}>
-      {route.name === 'music' ? <MusicWorkspace
+      {route.name === 'movies' ? <MoviesWorkspace route={route} /> : route.name === 'music' ? <MusicWorkspace
         route={route} playlists={playlists} downloads={downloadJobs} session={playerSession} currentVideo={currentVideo}
         playlistError={playlistsErrorMessage} busy={isCreatingPlaylist || isMutatingPlaylist}
         fullScreen={musicFullScreen} onFullScreenChange={setMusicFullScreen}

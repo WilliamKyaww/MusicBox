@@ -35,12 +35,16 @@ export function fetchSettings(signal?: AbortSignal) {
   return apiFetchJson<SettingsResponse>('/api/settings', { signal })
 }
 
-export function saveSettings(values: Record<string, SettingValue>) {
-  return apiFetchJson<SettingsResponse>('/api/settings', {
+export async function saveSettings(values: Record<string, SettingValue>) {
+  const result = await apiFetchJson<SettingsResponse>('/api/settings', {
     method: 'PUT',
     headers: GUARD,
     body: JSON.stringify({ values }),
   })
+  if (Object.hasOwn(values, 'MOVIES_ENABLED')) {
+    window.dispatchEvent(new Event('musicbox-movies-settings-changed'))
+  }
+  return result
 }
 
 export function checkYouTubeKey(apiKey?: string) {

@@ -43,7 +43,8 @@ async function launch() {
   const repoRoot = process.env.MUSICBOX_REPO_ROOT || path.resolve(__dirname, '..')
   const userDir = app.getPath('userData')
   fs.mkdirSync(userDir, { recursive: true })
-  configFile = app.isPackaged ? path.join(userDir, 'config.env') : path.join(repoRoot, 'backend/.env')
+  const moviesSmoke = smokeTest && process.env.MUSICBOX_SMOKE_MOVIES === '1'
+  configFile = app.isPackaged || moviesSmoke ? path.join(userDir, 'config.env') : path.join(repoRoot, 'backend/.env')
   dataDir = app.isPackaged || smokeTest ? path.join(userDir, 'data') : path.join(repoRoot, 'backend/data')
   if (!fs.existsSync(configFile)) {
     fs.copyFileSync(app.isPackaged ? path.join(process.resourcesPath, 'config.env.example') : path.join(__dirname, 'config.env.example'), configFile)
@@ -137,6 +138,9 @@ async function launch() {
         console.log(message)
         log(message + '\n')
       })
+    }
+    if (process.env.MUSICBOX_SMOKE_MOVIES === '1') {
+      await require('./movies-check.cjs').checkMovies(mainWindow, console.log)
     }
     if (process.env.MUSICBOX_SMOKE_SCREENSHOT) {
       fs.writeFileSync(process.env.MUSICBOX_SMOKE_SCREENSHOT, (await mainWindow.webContents.capturePage()).toPNG())

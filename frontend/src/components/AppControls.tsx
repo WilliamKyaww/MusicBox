@@ -1,5 +1,6 @@
 import { musicPath, type Experience } from '../experience'
 import { paths } from '../router'
+import { moviesPath } from '../movies/routes'
 import { ExperienceSwitcher } from './ExperienceSwitcher'
 
 /**
@@ -8,7 +9,8 @@ import { ExperienceSwitcher } from './ExperienceSwitcher'
  * depend on either experience's theme.
  */
 export function AppControls({ experience }: { experience: Experience }) {
-  const settingsHref = experience === 'music' ? musicPath('settings') : paths.settings()
+  const settingsHref = experience === 'movies' ? moviesPath('settings')
+    : experience === 'music' ? musicPath('settings') : paths.settings()
   const current = window.location.hash === settingsHref
   return (
     <div className="app-controls">
