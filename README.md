@@ -1,6 +1,6 @@
 # MusicBox
 
-MusicBox is a personal, self-hosted music and video player with two switchable experiences sharing one library. It runs as a Windows desktop app or as a web app in your browser.
+MusicBox is a personal media app with Video and Music experiences sharing one library, plus an optional independent Movies/TV workspace for authorised local files and catalogue discovery. It runs as a Windows desktop app or as a web app in your browser.
 
 Warning: vibe coded
 
@@ -19,15 +19,26 @@ Music view still plays YouTube or your downloaded audio, **not Spotify's streami
 
 This is not full Spotify feature parity. Spotify Connect, Jam, Blend, AI DJ, licensed lyrics for every song, podcasts/audiobooks, account/cloud sync, Smart Shuffle, crossfade, gapless transitions, equaliser and loudness normalisation are not implemented. Search-based features use YouTube API quota, so search waits for a pause in typing. The researched feature inventory is in `docs/spotify-feature-research-2026-10-03.md` (local documentation).
 
-## Movies Preview
+## Movies and TV
 
-An optional third experience is available in **Settings > Connections > Movies experience**. Enabling it adds **Movies** to the shared switch without replacing Video or Music. Movies has its own home and Settings routes; switching to its preview keeps existing audio playing.
+Enable **Settings > Connections > Movies experience** for the independent, Netflix-inspired Movies workspace. It includes a featured hero, catalogue rows, movie/TV search and suggestions, type/genre filters, details, credits, trailers, seasons/episodes, My List, local profiles, Watch History, Continue Watching and recommendations. Browsing Movies keeps existing music playing; starting a film pauses it without clearing the queue.
 
-This is the **foundation**, not a playable movie catalogue. Search, movie/TV metadata, watchlists, Continue Watching and movie playback are not implemented yet. No movie provider is contacted and no Movies database is created by opening the preview. Metadata access and authorised playback sources will be added through separate gates in `docs/NETFLIX_CLONE_RESEARCH_AND_IMPLEMENTATION_PLAN.md`.
+### Set Up Content
 
-For managed installations set `MOVIES_ENABLED=true`; the default is `false`. The future Movies SQLite store is separate from songs/playlists, under `backend/data/movies` (or `MOVIES_DATA_DIR`) on the web, and the installed desktop app's managed `data/movies` directory. The schema foundation is tested but not activated by this preview. No film rights, accounts, subscriptions or streaming services are bundled.
+1. In Connections, set **Movies media folder** to a folder on the computer running MusicBox containing files you are authorised to play. Nothing is scanned, uploaded or copied automatically.
+2. Open **Movies > My files** and register a relative path such as `Films/My film.mp4`, with a title and rights confirmation. For TV, optionally supply a show title, season and episode number. MP4 with H.264/AAC or WebM is recommended; FFprobe verifies the file before registration. Unregistering a file does not delete the original.
+3. Optionally add your own **TMDB read access token** in Connections after reviewing TMDB's terms. This enables online discovery, metadata and regional legal-availability links. Without a token, the app searches and plays your local collection. TMDB does not supply film streams or streaming rights.
+4. To attach a file to an online title, open that title's details and choose **Register a local file**. For a TV show, open the specific episode first. A title without a file is explicitly labelled as details-only.
 
-Movies-specific checks: run `backend/.venv/Scripts/python.exe -m unittest discover -s backend/tests -p test_movies.py` from an environment with `backend` on `PYTHONPATH`, or run `.venv\Scripts\python.exe -m unittest discover -s tests -p test_movies.py` from `backend`. To smoke-test the installed/packaged preview without touching your library or keys, set `MUSICBOX_SMOKE_MOVIES=1` and launch `MusicBox.exe --smoke-test`; this uses disposable configuration and data.
+The separate movie player supports play/pause, seeking, resume, volume, fullscreen, speed, keyboard controls, WebVTT subtitles, and selection among registered file qualities. Place `My film.en.vtt` beside `My film.mp4` for subtitles. Optional intro markers supplied during registration enable Skip intro; they are not guessed. TV playback offers the next registered episode, including the next season, with opt-in autoplay. Progress is saved periodically and on pause/seek/navigation; completing 95% marks a title watched.
+
+Movies is **local-first**, not a hosted Netflix service. Profiles separate lists/history on one trusted installation; they are not authenticated accounts or parental controls. Remote/managed-host access to Movies data is rejected. Commercial-film subscriptions, DRM, cloud delivery, adaptive HLS/DASH, transcoding, independent audio-track switching and cross-device sync are not included. No films, paid services, subscriptions or credentials are bundled. Review metadata/image terms before commercial use.
+
+Configuration: `MOVIES_ENABLED` defaults to `false`; `MOVIES_TMDB_TOKEN` is write-only in Settings; `MOVIES_MEDIA_DIR` is the explicit media root; `MOVIES_REGION` defaults to `GB`. Movies SQLite schema v3 lives under `backend/data/movies` (or `MOVIES_DATA_DIR`) on the web, and `%APPDATA%\MusicBox\data\movies` on installed desktop. It never migrates the existing songs/playlists. The status endpoint does not create a database; using enabled Movies data features does.
+
+Movies checks: from `backend`, run `.venv\Scripts\python.exe -m unittest discover -s tests -p "test_movies*.py"`. Frontend unit/browser and desktop tests include Movies. For packaged/installed validation, set `MUSICBOX_SMOKE_MOVIES=1` and optionally `MUSICBOX_SMOKE_MOVIE_FILE` to the absolute path of `frontend/e2e/fixtures/movie.webm`, then launch `MusicBox.exe --smoke-test`. This registers the original generated test clip and verifies playback/progress in disposable configuration/data, never your real library.
+
+Metadata uses TMDB's server-side bearer-token API, with a bounded ten-minute in-memory cache. The attribution logo in `frontend/public/tmdb-logo.svg` is the unmodified logo used by [TMDB's official documentation](https://developer.themoviedb.org/docs/faq), retrieved from `https://files.readme.io/29c6fee-blue_short.svg` on 5 October 2026. The 30-second silent test video is generated from a solid colour using FFmpeg, not movie footage.
 
 ## Layout
 
@@ -59,7 +70,7 @@ backend/
   setup.cmd             Creates backend\.venv and installs or updates packages
   .env.example          Backend environment template
 frontend/
-  src/                  React app: Video pages, Music (music/), Movies preview (movies/), Settings (settings/)
+  src/                  React app: Video pages, Music (music/), Movies/TV (movies/), Settings (settings/)
   e2e/, tests/          Playwright browser tests and Node unit tests
 desktop/                Electron app, packaging scripts and desktop tests
 AGENTS.md               Persistent instructions for contributors and coding agents

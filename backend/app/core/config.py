@@ -10,6 +10,9 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     app_name: str = "MusicBox API"
     movies_enabled: bool = Field(default=False, alias="MOVIES_ENABLED")
+    movies_tmdb_token: str = Field(default="", alias="MOVIES_TMDB_TOKEN")
+    movies_media_dir: str = Field(default="", alias="MOVIES_MEDIA_DIR")
+    movies_region: str = Field(default="GB", alias="MOVIES_REGION")
     movies_data_dir: Path = Field(
         default=BACKEND_DIR / "data" / "movies", alias="MOVIES_DATA_DIR"
     )

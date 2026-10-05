@@ -56,10 +56,16 @@ SPECS: tuple[SettingSpec, ...] = (
         group="movies",
         kind="boolean",
         description=(
-            "Show the Movies preview alongside Video and Music. "
-            "Catalogue access and movie playback are not available yet."
+            "Enable the local-first Movies and TV experience alongside Video and Music."
         ),
     ),
+    SettingSpec(key="MOVIES_TMDB_TOKEN", label="TMDB read access token", group="movies", kind="secret",
+                description="Optional catalogue metadata, not film streams. Add your own API Read Access Token after reviewing TMDB's terms. Local titles work without it.", max_length=2048),
+    SettingSpec(key="MOVIES_MEDIA_DIR", label="Movies media folder", group="movies", kind="text",
+                description="Full path to a folder containing movies/episodes you are authorised to play. Files are registered explicitly, never scanned or copied automatically.", max_length=2048),
+    SettingSpec(key="MOVIES_REGION", label="Movies region", group="movies", kind="text",
+                description="Two-letter country code for release ratings and legal availability links, for example GB.",
+                pattern=r"^[A-Z]{2}$", pattern_message="Use a two-letter uppercase country code, for example GB."),
     SettingSpec(
         key="YOUTUBE_API_KEY",
         label="YouTube Data API Key",

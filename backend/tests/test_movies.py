@@ -36,7 +36,7 @@ class MoviesRepositoryTests(unittest.TestCase):
         self.repository.initialise()
         with closing(sqlite3.connect(self.repository.path)) as connection, connection:
             for kind in ("movie", "show"):
-                connection.execute("INSERT INTO titles VALUES (?, ?, ?)", (kind, kind, "Test"))
+                connection.execute("INSERT INTO titles(id,kind,title) VALUES (?, ?, ?)", (kind, kind, "Test"))
                 connection.execute("INSERT INTO provider_refs VALUES (?, ?, ?, ?)", (kind, "tmdb", kind, "123"))
             with self.assertRaises(sqlite3.IntegrityError):
                 connection.execute("INSERT INTO provider_refs VALUES ('movie', 'tmdb', 'movie', '123')")
@@ -75,8 +75,9 @@ class MoviesStatusTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.headers['cache-control'], 'no-store')
                     self.assertEqual(response.json(), {
-                        "enabled": enabled, "stage": "foundation",
-                        "catalogue_available": False, "playback_available": False,
+                        "enabled": enabled, "stage": "local",
+                        "catalogue_available": enabled, "playback_available": False,
+                        "metadata_configured": False, "media_configured": False, "local_access": True,
                         "schema_version": SCHEMA_VERSION,
                     })
                     self.assertFalse(data_dir.exists())

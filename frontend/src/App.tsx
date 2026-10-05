@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   startTransition,
   useCallback,
   useEffect,
@@ -64,7 +66,8 @@ import { VideoActionsContext, type VideoActions, type WatchQueue } from './video
 import { artistPath, musicPath, rememberExperience } from './experience'
 import { recordHistory } from './library'
 import { MusicWorkspace } from './music/MusicWorkspace'
-import { MoviesWorkspace } from './movies/MoviesWorkspace'
+import { getPlaybackControls } from './music/playback'
+import { MoviesBoundary } from './movies/MoviesBoundary'
 import { MusicIcon } from './music/MusicIcon'
 import type { PlaySource } from './music/MusicContext'
 import { contextPath } from './music/helpers'
@@ -91,6 +94,8 @@ import './App.css'
 import './youtube.css'
 import './music/music.css'
 import './shared.css'
+
+const MoviesWorkspace = lazy(() => import('./movies/MoviesWorkspace').then(module => ({ default: module.MoviesWorkspace })))
 
 type ToastMessage = { id: number; message: string }
 type LoopMode = 'off' | 'once' | 'all' | 'one'
@@ -1345,7 +1350,7 @@ function App() {
 
   return (
     <VideoActionsContext.Provider value={videoActions}>
-      {route.name === 'movies' ? <MoviesWorkspace route={route} /> : route.name === 'music' ? <MusicWorkspace
+      {route.name === 'movies' ? <MoviesBoundary key={hash}><Suspense fallback={<p role="status">Loading Movies...</p>}><MoviesWorkspace route={route} onMoviePlay={() => getPlaybackControls()?.pause()} /></Suspense></MoviesBoundary> : route.name === 'music' ? <MusicWorkspace
         route={route} playlists={playlists} downloads={downloadJobs} session={playerSession} currentVideo={currentVideo}
         playlistError={playlistsErrorMessage} busy={isCreatingPlaylist || isMutatingPlaylist}
         fullScreen={musicFullScreen} onFullScreenChange={setMusicFullScreen}

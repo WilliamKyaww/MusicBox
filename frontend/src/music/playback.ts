@@ -19,6 +19,7 @@ export type PlaybackSnapshot = {
   canGoPrevious: boolean
 }
 export type PlaybackControls = {
+  pause: () => void
   toggle: () => void
   seek: (seconds: number) => void
   next: () => void

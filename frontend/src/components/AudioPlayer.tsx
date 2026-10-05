@@ -172,6 +172,7 @@ export function AudioPlayer({
   const controlsRef = useRef<PlaybackControls | null>(null)
   useEffect(() => {
     controlsRef.current = {
+      pause: () => audioRef.current?.pause(),
       toggle: handlePlayPause,
       seek: seconds => {
         const audio = audioRef.current
@@ -189,6 +190,7 @@ export function AudioPlayer({
     }
   })
   useEffect(() => registerPlaybackControls({
+    pause: () => controlsRef.current?.pause(),
     toggle: () => controlsRef.current?.toggle(),
     seek: seconds => controlsRef.current?.seek(seconds),
     next: () => controlsRef.current?.next(),

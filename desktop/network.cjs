@@ -43,6 +43,11 @@ async function proxyDesktopRequest(request, backendOrigin, token, localFetch) {
       if (value) headers.set(name, value)
     }
     headers.set('X-MusicBox-Desktop', token)
+    if (target.origin === backendOrigin && target.pathname === source.pathname &&
+        source.pathname.startsWith('/api/movies/') && ['POST', 'PUT', 'DELETE'].includes(method)) {
+      const guard = request.headers.get('X-MusicBox-Movies')
+      if (guard) headers.set('X-MusicBox-Movies', guard)
+    }
     // Only Settings writes need this guard; never attach it to media requests.
     if (target.origin === backendOrigin && target.pathname === source.pathname &&
         ((method === 'PUT' && source.pathname === '/api/settings') ||

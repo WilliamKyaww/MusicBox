@@ -41,7 +41,7 @@ export async function saveSettings(values: Record<string, SettingValue>) {
     headers: GUARD,
     body: JSON.stringify({ values }),
   })
-  if (Object.hasOwn(values, 'MOVIES_ENABLED')) {
+  if (Object.keys(values).some(key => key.startsWith('MOVIES_'))) {
     window.dispatchEvent(new Event('musicbox-movies-settings-changed'))
   }
   return result

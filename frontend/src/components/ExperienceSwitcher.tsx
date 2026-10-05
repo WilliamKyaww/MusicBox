@@ -17,7 +17,7 @@ export function ExperienceSwitcher({ active }: { active: Experience }) {
             if (mode !== active) navigate(experiencePath(mode))
           }}
           title={
-            mode === 'movies' ? 'Movies experience preview' : mode === 'video'
+            mode === 'movies' ? 'Movies and TV experience' : mode === 'video'
               ? 'YouTube-style video experience'
               : 'Spotify-style music experience'
           }

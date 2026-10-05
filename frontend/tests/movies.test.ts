@@ -7,13 +7,13 @@ test('Movies has its own route namespace and does not consume existing routes', 
     assert.equal(parseMoviesRoute(route), null)
   }
   for (const route of ['#/movies', '#/movies/', moviesPath()]) {
-    assert.deepEqual(parseMoviesRoute(route), { name: 'movies', view: 'home' })
+    assert.deepEqual(parseMoviesRoute(route), { name: 'movies', view: 'home', id: '', query: '' })
   }
-  assert.deepEqual(parseMoviesRoute(moviesPath('settings')), { name: 'movies', view: 'settings' })
+  assert.deepEqual(parseMoviesRoute(moviesPath('settings')), { name: 'movies', view: 'settings', id: '', query: '' })
 })
 
 test('Unknown Movies links stay inside Movies, including malformed input', () => {
   for (const route of ['#/movies/watch?v=123', '#/movies/%ZZ', '#/movies/home/extra']) {
-    assert.deepEqual(parseMoviesRoute(route), { name: 'movies', view: 'not-found' })
+    assert.deepEqual(parseMoviesRoute(route), { name: 'movies', view: 'not-found', id: '', query: '' })
   }
 })

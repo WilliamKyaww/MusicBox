@@ -2,6 +2,21 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { desktopRequestHeaders, proxyDesktopRequest } = require('../network.cjs')
 
+test('Movies guard is scoped to local Movies mutations and stripped on redirects', async () => {
+  for (const [route, method, expected] of [
+    ['/api/movies/library','POST','1'], ['/api/movies/profiles/x/history','DELETE','1'],
+    ['/api/movies/profiles/x/progress/y','PUT','1'], ['/api/movies/status','GET',null],
+    ['/api/settings','PUT',null], ['/api/stream/test','GET',null],
+  ]) {
+    let calls=0
+    await proxyDesktopRequest(new Request('musicbox://app'+route,{method,headers:{'X-MusicBox-Movies':'1'}}), 'http://127.0.0.1:49152','private-token',async (_url,options)=>{
+      calls++
+      assert.equal(options.headers.get('X-MusicBox-Movies'),calls===1 ? expected : null)
+      return calls===1 ? new Response(null,{status:307,headers:{location:'/api/other'}}) : new Response('{}')
+    })
+  }
+})
+
 test('Settings writes forward the guard only to their local endpoint', async () => {
   for (const [route, method, expected] of [
     ['/api/settings', 'PUT', '1'],
