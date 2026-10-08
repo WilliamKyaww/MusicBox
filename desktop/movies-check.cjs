@@ -12,7 +12,7 @@ async function checkMovies(window, report) {
     if (response.status !== 403) throw new Error('Settings write guard was not enforced');
     await json('/api/settings', {method:'PUT', headers:{'Content-Type':'application/json','X-MusicBox-Settings':'1'}, body:JSON.stringify({values:{MOVIES_ENABLED:true}})});
     const after = await json('/api/movies/status');
-    if (!after.enabled || after.playback_available || !after.catalogue_available) throw new Error('Movies settings did not take effect');
+    if (!after.enabled || !after.playback_available || !after.catalogue_available) throw new Error('Movies settings did not take effect');
     window.dispatchEvent(new Event('musicbox-movies-settings-changed'));
     return after;
   })()`)
@@ -72,6 +72,32 @@ async function checkMovies(window, report) {
     await new Promise(resolve => setTimeout(resolve, 600))
   }
   report('MUSICBOX_MOVIES_CHECK_OK ' + JSON.stringify(result))
+  if (process.env.MUSICBOX_SMOKE_FREE_STREAM === '1') {
+    const titleId = 'open:movie:big-buck-bunny'
+    await window.webContents.executeJavaScript(`location.hash = '#/movies/watch?id=' + encodeURIComponent(${JSON.stringify(titleId)})`)
+    await waitFor('.movies-player-frame video')
+    const waitUntil = async (script, description) => {
+      for (let attempt = 0; attempt < 180; attempt++) {
+        if (await window.webContents.executeJavaScript(script)) return
+        await new Promise(resolve => setTimeout(resolve, 250))
+      }
+      throw new Error('Free-stream check failed: ' + description)
+    }
+    await waitUntil(`document.querySelector('.movies-player-frame video')?.currentTime > 1`, 'initial playback')
+    await waitUntil(`(() => {const v=document.querySelector('.movies-player-frame video');return v?.videoWidth>0 && v.getVideoPlaybackQuality().totalVideoFrames>0;})()`, 'decoded video frames')
+    const source = await window.webContents.executeJavaScript(`document.querySelector('.movies-player-frame video').currentSrc`)
+    if (!source.startsWith('https://video.blender.org/object-storage/web_videos/')) throw new Error('Unapproved stream origin')
+    await window.webContents.executeJavaScript(`document.querySelector('.movies-player-frame video').currentTime = 120`)
+    await waitUntil(`document.querySelector('.movies-player-frame video')?.currentTime > 121`, 'forward seeking')
+    await window.webContents.executeJavaScript(`document.querySelector('.movies-player-frame video').currentTime = 10`)
+    await waitUntil(`document.querySelector('.movies-player-frame video')?.currentTime > 11`, 'backward seeking')
+    await window.webContents.executeJavaScript(`document.querySelector('.movies-player-frame video').pause()`)
+    await waitUntil(`(async () => { const profiles=await fetch('/api/movies/profiles').then(r=>r.json()); const history=await fetch('/api/movies/profiles/'+profiles[0].id+'/history').then(r=>r.json()); return history.some(i=>i.id===${JSON.stringify(titleId)} && i.progress.position>=10); })()`, 'saved progress')
+    report('MUSICBOX_FREE_STREAM_OK ' + JSON.stringify({ provider: 'Blender Open Movies', seeking: true, savedProgress: true }))
+    await window.webContents.executeJavaScript(`location.hash = '#/movies/details?id=' + encodeURIComponent(${JSON.stringify(titleId)})`)
+    await waitFor('.movies-detail')
+    await new Promise(resolve => setTimeout(resolve, 600))
+  }
 }
 
 module.exports = { checkMovies }

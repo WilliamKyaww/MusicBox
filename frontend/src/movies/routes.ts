@@ -1,6 +1,6 @@
-export type MoviesView = 'home' | 'movies' | 'tv' | 'search' | 'list' | 'history' | 'library' | 'profiles' | 'details' | 'watch' | 'settings'
+export type MoviesView = 'home' | 'movies' | 'tv' | 'search' | 'free' | 'list' | 'history' | 'library' | 'profiles' | 'details' | 'watch' | 'settings'
 export type MoviesRoute = { name: 'movies'; view: MoviesView | 'not-found'; id: string; query: string }
-const VIEWS: MoviesView[] = ['home','movies','tv','search','list','history','library','profiles','details','watch','settings']
+const VIEWS: MoviesView[] = ['home','movies','tv','search','free','list','history','library','profiles','details','watch','settings']
 
 export function moviesPath(view: MoviesView = 'home', id = '', query = '') {
   const params = new URLSearchParams()
@@ -16,6 +16,6 @@ export function parseMoviesRoute(hash: string): MoviesRoute | null {
   const params = new URLSearchParams(search)
   const id = params.get('id') ?? ''
   let view: MoviesRoute['view'] = VIEWS.includes(candidate as MoviesView) ? candidate as MoviesView : 'not-found'
-  if ((view === 'details' || view === 'watch') && !/^(tmdb|local):(movie|show|episode):[A-Za-z0-9:-]+$/.test(id)) view = 'not-found'
+  if ((view === 'details' || view === 'watch') && !/^(tmdb|local|open):(movie|show|episode):[A-Za-z0-9:-]+$/.test(id)) view = 'not-found'
   return { name: 'movies', view, id, query: params.get('q') ?? '' }
 }

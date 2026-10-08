@@ -1,4 +1,4 @@
-"""Local-first movie/TV catalogue and playback, separate from Video/Music."""
+"""Hybrid movie/TV catalogue and playback, separate from Video/Music."""
 import os
 import sqlite3
 from pathlib import Path
@@ -11,6 +11,7 @@ from app.core.config import Settings, get_settings
 from app.services.movies.repository import MoviesRepository, SCHEMA_VERSION
 from app.services.movies.metadata import TMDB, MetadataError, normalise
 from app.services.movies.media import TYPES, resolve_media, probe_media, subtitles
+from app.services.movies import open_films
 
 router = APIRouter(prefix='/movies')
 LOOPBACK = {'127.0.0.1', '::1', 'localhost', 'testclient'}
@@ -52,6 +53,8 @@ def guarded(call, *args):
 
 
 def title(repo, settings, title_id):
+    if title_id.startswith('open:'):
+        return repo.save_title(open_films.details(title_id))
     cached = repo.title(title_id)
     if title_id.startswith('local:') or title_id.startswith('tmdb:episode:'):
         if not cached:
@@ -66,6 +69,8 @@ def title(repo, settings, title_id):
 
 
 def decorate(repo, settings, item):
+    if item['id'] in open_films.BY_ID:
+        item = {**item, **open_films.details(item['id'])}
     assets = []
     for asset in repo.assets(item['id']):
         try:
@@ -73,7 +78,9 @@ def decorate(repo, settings, item):
             available = True
         except ValueError:
             available = False
-        assets.append({k: asset[k] for k in ('id', 'label', 'duration', 'height', 'video_codec', 'audio_codec', 'intro_start', 'intro_end')} | {'available': available})
+        assets.append({k: asset[k] for k in ('id', 'label', 'duration', 'height', 'video_codec', 'audio_codec', 'intro_start', 'intro_end')} | {'available': available, 'source_type': 'local'})
+    if item['id'] in open_films.BY_ID and settings.movies_free_streaming_enabled:
+        assets.append(open_films.advertised_asset(item['id']))
     return {**item, 'assets': assets, 'playable': any(a['available'] for a in assets)}
 
 
@@ -109,8 +116,9 @@ class ProgressInput(BaseModel):
 def status(request: Request, response: Response, settings: Settings = Depends(get_settings)):
     response.headers['Cache-Control'] = 'no-store'
     enabled = settings.movies_enabled
-    return {'enabled': enabled, 'stage': 'local', 'catalogue_available': enabled and local_access(request),
-            'playback_available': enabled and local_access(request) and bool(settings.movies_media_dir),
+    return {'enabled': enabled, 'stage': 'hybrid', 'catalogue_available': enabled and local_access(request),
+            'playback_available': enabled and local_access(request) and (bool(settings.movies_media_dir) or settings.movies_free_streaming_enabled),
+            'free_streaming_enabled': settings.movies_free_streaming_enabled,
             'metadata_configured': bool(settings.movies_tmdb_token), 'media_configured': bool(settings.movies_media_dir),
             'local_access': local_access(request), 'schema_version': SCHEMA_VERSION}
 
@@ -136,22 +144,29 @@ def delete_profile(profile_id: str, settings: Settings = Depends(write_access)):
 @router.get('/catalogue')
 def catalogue(q: str = Query(default='', max_length=200), kind: Literal['all', 'movie', 'show'] = 'all',
               page: int = Query(default=1, ge=1, le=500), category: Literal['popular', 'trending', 'new', 'top_rated'] = 'popular',
-              genre: int | None = Query(default=None, ge=1), source: Literal['online', 'local'] = 'online', settings: Settings = Depends(active)):
+              genre: int | None = Query(default=None, ge=1), source: Literal['online', 'local', 'free'] = 'online', settings: Settings = Depends(active)):
     repo = repository(settings)
+    free = open_films.catalogue(q, kind, genre) if settings.movies_free_streaming_enabled else []
+    if source == 'free':
+        return {'items': [decorate(repo, settings, i) for i in free] if page == 1 else [], 'page': page, 'total_pages': 1, 'source': 'free'}
     if source == 'local' or not settings.movies_tmdb_token:
         items = guarded(repo.local_titles)
         items = [i for i in items if i['kind'] != 'episode' and (kind == 'all' or i['kind'] == kind) and q.casefold() in i['title'].casefold()]
-        return {'items': [decorate(repo, settings, i) for i in items[(page-1)*40:page*40]], 'page': page, 'total_pages': max(1, (len(items)+39)//40), 'source': 'local'}
+        if source != 'local':
+            items = list({i['id']: i for i in [*free, *items]}.values())
+        return {'items': [decorate(repo, settings, i) for i in items[(page-1)*40:page*40]], 'page': page, 'total_pages': max(1, (len(items)+39)//40), 'source': 'local' if source == 'local' else 'hybrid'}
     result = guarded(TMDB(settings.movies_tmdb_token, settings.movies_region).browse, q, kind, page, category, genre)
     result['items'] = [decorate(repo, settings, i) for i in result['items']]
+    if q and page == 1:
+        result['items'] = [decorate(repo, settings, i) for i in free] + result['items']
     result['source'] = 'tmdb'
     return result
 
 
 @router.get('/genres')
-def genres(kind: Literal['movie', 'show'] = 'movie', settings: Settings = Depends(active)):
-    if not settings.movies_tmdb_token:
-        return []
+def genres(kind: Literal['movie', 'show'] = 'movie', source: Literal['online', 'local', 'free'] = 'online', settings: Settings = Depends(active)):
+    if source == 'free' or not settings.movies_tmdb_token:
+        return [{'id': key, 'name': value} for key, value in open_films.GENRES.items()] if kind == 'movie' and settings.movies_free_streaming_enabled else []
     return guarded(TMDB(settings.movies_tmdb_token).get, 'genre/'+('tv' if kind == 'show' else 'movie')+'/list').get('genres', [])
 
 
@@ -166,6 +181,8 @@ def recommendations(title_id: str, settings: Settings = Depends(active)):
     repo = repository(settings)
     item = guarded(title, repo, settings, title_id)
     local = [i for i in repo.local_titles() if i['id'] != title_id and i['kind'] != 'episode']
+    if settings.movies_free_streaming_enabled:
+        local = list({i['id']: i for i in [*local, *open_films.catalogue()] if i['id'] != title_id}.values())
     local.sort(key=lambda i: len(set(i.get('genres', [])) & set(item.get('genres', []))), reverse=True)
     if title_id.startswith('tmdb:') and item['kind'] in ('movie', 'show') and settings.movies_tmdb_token:
         data = guarded(TMDB(settings.movies_tmdb_token).get, ('tv' if item['kind'] == 'show' else 'movie')+'/'+title_id.split(':')[-1]+'/recommendations')
@@ -271,17 +288,28 @@ def save_title(profile_id: str, title_id: str, body: SavedInput, settings: Setti
 def playback(profile_id: str, title_id: str, asset_id: str | None = None, settings: Settings = Depends(write_access)):
     repo = repository(settings)
     item = decorate(repo, settings, guarded(title, repo, settings, title_id))
-    asset = next((a for a in item['assets'] if a['available'] and (not asset_id or a['id'] == asset_id)), None)
+    asset = next((a for a in item['assets'] if a['available'] and (not asset_id or a['id'] == asset_id
+                 or (a.get('source_type') == 'remote' and asset_id.startswith('blender:')))), None)
     if not asset:
         raise HTTPException(404, 'No registered playable file is available for this title. Metadata is not a film stream.')
-    record = repo.asset(asset['id'])
-    file = guarded(resolve_media, settings.movies_media_dir, record['relative_path'])
+    guarded(repo.require_profile, profile_id)
+    source_type = asset.get('source_type', 'local')
+    if source_type == 'remote':
+        asset, remote_assets = guarded(open_films.resolve, title_id, asset_id)
+        item['assets'] = [a for a in item['assets'] if a.get('source_type') != 'remote'] + remote_assets
+        playback_url = asset['url']
+        tracks = []
+    else:
+        record = repo.asset(asset['id'])
+        file = guarded(resolve_media, settings.movies_media_dir, record['relative_path'])
+        playback_url = f"/api/movies/assets/{asset['id']}/file"
+        tracks = [{**t, 'url': f"/api/movies/assets/{asset['id']}/subtitles/{t['name']}"} for t in subtitles(settings.movies_media_dir, file)]
     state = guarded(repo.state, profile_id, title_id)
     session = guarded(repo.start_session, profile_id, title_id)
-    tracks = [{**t, 'url': f"/api/movies/assets/{asset['id']}/subtitles/{t['name']}"} for t in subtitles(settings.movies_media_dir, file)]
-    return {'session_id': session, 'title': item, 'asset_id': asset['id'], 'url': f"/api/movies/assets/{asset['id']}/file",
+    response = {'session_id': session, 'title': item, 'asset_id': asset['id'], 'url': playback_url,
             'resume': 0 if not state['progress'] or state['progress']['completed'] else state['progress']['position'],
-            'duration': asset['duration'], 'subtitles': tracks}
+            'duration': asset['duration'], 'subtitles': tracks, 'source_type': source_type}
+    return response
 
 
 @router.put('/profiles/{profile_id}/progress/{title_id}')

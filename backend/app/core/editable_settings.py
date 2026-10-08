@@ -56,9 +56,11 @@ SPECS: tuple[SettingSpec, ...] = (
         group="movies",
         kind="boolean",
         description=(
-            "Enable the local-first Movies and TV experience alongside Video and Music."
+            "Enable Movies and TV with free creator-authorised streams, local files and optional TMDB discovery."
         ),
     ),
+    SettingSpec(key="MOVIES_FREE_STREAMING_ENABLED", label="Free online films", group="movies", kind="boolean",
+                description="Show the curated Blender Open Movies collection. Playback connects to the creator's service, uses your internet data and needs no paid API key. This is not every commercial film or series."),
     SettingSpec(key="MOVIES_TMDB_TOKEN", label="TMDB read access token", group="movies", kind="secret",
                 description="Optional catalogue metadata, not film streams. Add your own API Read Access Token after reviewing TMDB's terms. Local titles work without it.", max_length=2048),
     SettingSpec(key="MOVIES_MEDIA_DIR", label="Movies media folder", group="movies", kind="text",

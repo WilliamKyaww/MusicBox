@@ -75,8 +75,9 @@ class MoviesStatusTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.headers['cache-control'], 'no-store')
                     self.assertEqual(response.json(), {
-                        "enabled": enabled, "stage": "local",
-                        "catalogue_available": enabled, "playback_available": False,
+                        "enabled": enabled, "stage": "hybrid",
+                        "catalogue_available": enabled, "playback_available": enabled,
+                        "free_streaming_enabled": True,
                         "metadata_configured": False, "media_configured": False, "local_access": True,
                         "schema_version": SCHEMA_VERSION,
                     })

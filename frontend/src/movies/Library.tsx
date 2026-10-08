@@ -53,4 +53,4 @@ export function MovieProfiles({ profiles, selected, onChange }: { profiles: Prof
   </section>
 }
 
-export function MovieSettings() { return <><p className="movies-notice">Movies settings are under Connections below. TMDB supplies metadata only; set a media folder and register authorised files to play films. The other controls remain app-wide Video/Music settings.</p><SettingsPage experience="movies" /></> }
+export function MovieSettings() { return <><p className="movies-notice">Movies settings are under Connections below. Free online films need no paid key or media folder. TMDB adds wider discovery, not commercial streams; local files remain an optional source. The other controls remain app-wide Video/Music settings.</p><SettingsPage experience="movies" /></> }

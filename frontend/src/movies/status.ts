@@ -3,7 +3,8 @@ import { apiFetchJson } from '../api/client'
 
 type MoviesStatus = {
   enabled: boolean
-  stage: 'foundation' | 'local'
+  stage: 'foundation' | 'local' | 'hybrid'
+  free_streaming_enabled?: boolean
   metadata_configured?: boolean
   media_configured?: boolean
   local_access?: boolean
@@ -29,7 +30,7 @@ export async function refreshMoviesStatus() {
     const data = await apiFetchJson<MoviesStatus>('/api/movies/status', {
       signal: AbortSignal.timeout(10_000),
     })
-    if (typeof data.enabled !== 'boolean' || !['foundation','local'].includes(data.stage)) {
+    if (typeof data.enabled !== 'boolean' || !['foundation','local','hybrid'].includes(data.stage)) {
       throw new Error('Unsupported Movies status')
     }
     if (id === requestId) publish({ data, error: false, loading: false })

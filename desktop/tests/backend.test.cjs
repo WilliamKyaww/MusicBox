@@ -98,7 +98,7 @@ test('desktop backend binds its own port, requires its session token, serves the
     assert.equal(changed.status, 200)
     const movies = await (await fetch(moviesUrl, { headers })).json()
     assert.equal(movies.enabled, enabled)
-    assert.equal(movies.playback_available, false)
+    assert.equal(movies.playback_available, enabled)
     assert.equal(movies.catalogue_available, enabled)
   }
   assert.equal(fs.existsSync(path.join(tempDir, 'data/movies')), false)

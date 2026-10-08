@@ -79,23 +79,24 @@ export function MoviePlayer({ id, profile, onPlay }: { id: string; profile: stri
       if (e.key.toLowerCase() === 'f') { e.preventDefault(); void fullscreen() }
       if (e.key.toLowerCase() === 'm') element.muted = !element.muted
     }}>
-      <video key={session.asset_id} ref={video} controls playsInline autoPlay={autoStart} preload="metadata" src={getApiHref(session.url)}
+      <video key={`${session.session_id}:${session.asset_id}`} ref={video} controls playsInline autoPlay={autoStart} preload="metadata" src={session.source_type === 'remote' ? session.url : getApiHref(session.url)}
         onLoadedMetadata={() => { const element = video.current!; element.currentTime = Math.min(qualityPosition.current ?? session.resume, Math.max(0, (element.duration || session.duration) - 1)); qualityPosition.current = null; position.current = element.currentTime; setWaiting(false) }}
         onTimeUpdate={() => { position.current = video.current?.currentTime ?? position.current; setTime(position.current) }}
         onPlay={() => { onPlay(); setEnded(false); setWaiting(false) }} onPlaying={() => setWaiting(false)} onWaiting={() => setWaiting(true)} onCanPlay={() => setWaiting(false)}
         onPause={() => void checkpoint.current()} onSeeked={() => { position.current = video.current?.currentTime ?? 0; void checkpoint.current() }}
         onEnded={() => { position.current = session.duration; setEnded(true); void checkpoint.current() }}
-        onError={() => setError('Playback failed. Check the registered file and use a browser-compatible MP4 or WebM. No alternative streams will be fetched.')}>
+        onError={() => setError(session.source_type === 'remote' ? 'The creator-hosted stream could not play. Check your connection or try another available quality. No unverified fallback provider will be used.' : 'Playback failed. Check the registered file and use a browser-compatible MP4 or WebM. No alternative streams will be fetched.')}>
         {session.subtitles.map((track, index) => <track key={track.name} kind="subtitles" src={getApiHref(track.url)} label={track.label} srcLang={/^[a-z]{2}$/.test(track.label) ? track.label : 'und'} default={index === 0} />)}
       </video>{waiting && <span className="movies-buffering" role="status">Buffering...</span>}
     </div><div className="movies-player-options"><button onClick={() => void fullscreen()}>Fullscreen</button>
       <button onClick={() => { if (video.current) video.current.currentTime = 0 }}>Start over</button>
-      <label>File quality<select value={session.asset_id} onChange={async e => { const selected = e.target.value; setAutoStart(!video.current?.paused); video.current?.pause(); qualityPosition.current = video.current?.currentTime ?? 0; await checkpoint.current(); setAsset(selected) }}>{session.title.assets.filter(a => a.available).map(a => <option key={a.id} value={a.id}>{a.label} / {a.video_codec}</option>)}</select></label>
+      <label>Playback quality<select value={session.asset_id} onChange={async e => { const selected = e.target.value; setAutoStart(!video.current?.paused); video.current?.pause(); qualityPosition.current = video.current?.currentTime ?? 0; await checkpoint.current(); setAsset(selected) }}>{session.title.assets.filter(a => a.available).map(a => <option key={a.id} value={a.id}>{a.label} / {a.video_codec}</option>)}</select></label>
       {!!activeAsset?.intro_end && time >= (activeAsset.intro_start ?? 0) && time < activeAsset.intro_end && <button onClick={() => { if (video.current) video.current.currentTime = activeAsset.intro_end! }}>Skip intro</button>}
       <label>Speed<select defaultValue="1" onChange={e => { if (video.current) video.current.playbackRate = Number(e.target.value) }}>{[0.75, 1, 1.25, 1.5, 2].map(rate => <option key={rate} value={rate}>{rate}x</option>)}</select></label>
       {next && <><a className="movies-action" href={moviesPath('watch', next.id)}>Next episode</a><label className="movies-check"><input type="checkbox" checked={autoplay} onChange={e => setAutoplay(e.target.checked)} />Autoplay next episode</label></>}
     </div>{ended && <p role="status">{autoplay && next ? 'Next episode starts in five seconds. Turn off autoplay to cancel.' : 'Finished watching.'}</p>}
     {saveError && <div role="alert">{saveError} <button onClick={() => void checkpoint.current()}>Retry saving progress</button></div>}
-    <p className="movies-notice">Native video controls include volume, seeking and available subtitles. Quality choices are your registered files, not adaptive streaming. Space/K: play/pause; arrows: seek; F: fullscreen; M: mute.</p></>}
+    {session.title.online_source && <p className="movies-notice">{session.title.online_source.attribution} / <a href={session.title.online_source.licence_url} target="_blank" rel="noreferrer">{session.title.online_source.licence}</a>. Complete film credits retained.</p>}
+    <p className="movies-notice">Native video controls include volume, seeking and available subtitles. Quality choices are registered files or creator-provided variants, not automatic adaptive streaming. Space/K: play/pause; arrows: seek; F: fullscreen; M: mute.</p></>}
   </div>
 }

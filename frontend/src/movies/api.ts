@@ -7,12 +7,13 @@ export type Movie = {
   date: string; runtime: number; poster: string | null; backdrop: string | null; genres: string[]
   rating: number; cast: string[]; crew: string[]; certification: string; available_providers: string[]
   seasons: { number: number; name: string; count: number }[]; trailer_url: string | null; provider_url: string | null
-  assets: { id: string; label: string; available: boolean; duration: number; height: number; video_codec: string; audio_codec: string; intro_start?: number; intro_end?: number }[]
+  assets: { id: string; label: string; available: boolean; duration: number; height: number; video_codec: string; audio_codec: string; intro_start?: number; intro_end?: number; source_type?: 'local' | 'remote' }[]
+  online_source?: { provider: string; page_url: string; licence: string; licence_url: string; attribution: string; verified_on: string }
   playable: boolean; progress?: Progress; show_id?: string; season?: number; episode?: number
 }
 export type Profile = { id: string; name: string; local_default: number }
-export type Catalogue = { items: Movie[]; page: number; total_pages: number; source: 'local' | 'tmdb' }
-export type MovieSession = { session_id: string; title: Movie; asset_id: string; url: string; resume: number; duration: number; subtitles: { name: string; label: string; url: string }[] }
+export type Catalogue = { items: Movie[]; page: number; total_pages: number; source: 'local' | 'tmdb' | 'hybrid' | 'free' }
+export type MovieSession = { session_id: string; title: Movie; asset_id: string; url: string; resume: number; duration: number; subtitles: { name: string; label: string; url: string }[]; source_type?: 'local' | 'remote' }
 const base = '/api/movies'
 const guard = { 'X-MusicBox-Movies': '1' }
 export const movieApi = {

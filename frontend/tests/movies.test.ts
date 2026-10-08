@@ -2,6 +2,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { moviesPath, parseMoviesRoute } from '../src/movies/routes.ts'
 
+test('free-streaming routes preserve provider-scoped identifiers', () => {
+  assert.equal(parseMoviesRoute(moviesPath('free'))?.view, 'free')
+  assert.equal(parseMoviesRoute(moviesPath('watch', 'open:movie:big-buck-bunny'))?.id, 'open:movie:big-buck-bunny')
+  assert.equal(parseMoviesRoute('#/movies/watch?id=https://example.com')?.view, 'not-found')
+})
+
 test('Movies has its own route namespace and does not consume existing routes', () => {
   for (const route of ['#/', '#/music/home', '#/watch?v=123', '#/movies-other']) {
     assert.equal(parseMoviesRoute(route), null)

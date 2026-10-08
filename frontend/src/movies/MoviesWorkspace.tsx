@@ -11,7 +11,7 @@ import { MovieLibrary, MovieProfiles, MovieSettings } from './Library'
 import { MoviePlayer } from './MoviePlayer'
 import './movies.css'
 
-const LINKS: [MoviesView, string][] = [['home','Home'],['movies','Movies'],['tv','TV shows'],['list','My list'],['history','History'],['library','My files']]
+const LINKS: [MoviesView, string][] = [['home','Home'],['free','Free to watch'],['movies','Movies'],['tv','TV shows'],['list','My list'],['history','History'],['library','My files']]
 
 function EnabledMovies({ route, online, onMoviePlay }: { route: MoviesRoute; online: boolean; onMoviePlay: () => void }) {
   const profiles = useMovieResource<Profile[]>('/profiles')
