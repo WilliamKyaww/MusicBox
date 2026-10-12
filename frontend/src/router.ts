@@ -146,6 +146,11 @@ export function navigate(path: string, options: { replace?: boolean } = {}) {
   window.location.hash = path
 }
 
+export function goBack() {
+  if (window.history.state?.musicboxCanGoBack) window.history.back()
+  else navigate(paths.home(), { replace: true })
+}
+
 function subscribe(callback: () => void) {
   window.addEventListener('hashchange', callback)
   return () => window.removeEventListener('hashchange', callback)

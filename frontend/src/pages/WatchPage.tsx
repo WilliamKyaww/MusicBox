@@ -9,13 +9,14 @@ import {
   updatePlayerPrefs,
   useLibrary,
 } from '../library'
-import { navigate, paths } from '../router'
+import { goBack, navigate, paths } from '../router'
 import { cacheKeys, useCachedResource } from '../useCachedResource'
 import { detailsToVideo, useVideoActions, type WatchQueue } from '../videoActions'
 import { ChannelAvatar } from '../components/ChannelAvatar'
 import { ResizeHandle } from '../components/ResizeHandle'
 import { PANELS, resetPanelSize, setPanelSize, usePanelSize } from '../panelSizes'
 import {
+  ArrowLeftIcon,
   DownloadIcon,
   ExternalLinkIcon,
   ImageIcon,
@@ -90,7 +91,20 @@ function WatchSkeleton() {
   )
 }
 
-export function WatchPage({ videoId, startSeconds, listId, watchQueue }: WatchPageProps) {
+export function WatchPage(props: WatchPageProps) {
+  return (
+    <>
+      <div className="watch-navigation">
+        <button type="button" className="yt-pill" onClick={goBack} aria-label="Back to previous page">
+          <ArrowLeftIcon className="yt-icon" /> Back
+        </button>
+      </div>
+      <WatchPageContent {...props} />
+    </>
+  )
+}
+
+function WatchPageContent({ videoId, startSeconds, listId, watchQueue }: WatchPageProps) {
   const { data: details, error } = useCachedResource(cacheKeys.video(videoId), (signal) =>
     fetchVideoDetails(videoId, signal),
   )

@@ -16,7 +16,7 @@ import {
   cancelDownload,
   enqueueDownload,
   fetchDownloads,
-  getDirectDownloadHref,
+  prepareDeviceDownload,
   redownloadDownload,
   removeDownload,
   renameDownload,
@@ -44,6 +44,7 @@ import { getStreamUrl } from './api/streaming'
 import { createYouTubePlaylistExport } from './api/youtubePlaylists'
 import { AudioPlayer } from './components/AudioPlayer'
 import { DownloadOptionsDialog } from './components/DownloadOptionsDialog'
+import { DeviceDownloads, type DeviceDownloadItem } from './components/DeviceDownloads'
 import { DownloadQueuePanel } from './components/DownloadQueuePanel'
 import { PlaylistExportPanel } from './components/PlaylistExportPanel'
 import { PageHeader } from './components/PageHeader'
@@ -146,6 +147,7 @@ function App() {
     null,
   )
   const [pendingDownloadVideoIds, setPendingDownloadVideoIds] = useState<string[]>([])
+  const [deviceDownloads, setDeviceDownloads] = useState<DeviceDownloadItem[]>([])
   const [pendingDownloadRemovalIds, setPendingDownloadRemovalIds] = useState<string[]>([])
   const [pendingDownloadRenameIds, setPendingDownloadRenameIds] = useState<string[]>([])
   const [pendingRedownloadIds, setPendingRedownloadIds] = useState<string[]>([])
@@ -276,20 +278,13 @@ function App() {
     }
   })
 
-  function startDeviceDownload(video: VideoSearchResult, options: DownloadOptions) {
-    // Navigating an anchor lets the browser stream the file straight to disk
-    // instead of buffering a whole video in memory first.
-    const link = document.createElement('a')
-    link.href = getDirectDownloadHref(video, options)
-    link.download = ''
-    link.rel = 'noopener'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    pushToast(
-      `Preparing "${video.title}" for this device. The download starts once the file is ready.`,
-    )
+  async function startDeviceDownload(video: VideoSearchResult, options: DownloadOptions) {
+    try {
+      const job = await prepareDeviceDownload(video, options)
+      setDeviceDownloads((current) => [...current, { job, video, options }])
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : 'Could not start the device download. Please try again.')
+    }
   }
 
   async function handleDownload(
@@ -297,7 +292,7 @@ function App() {
     options: DownloadOptions = DEFAULT_DOWNLOAD_OPTIONS,
   ) {
     if (options.destination === 'device') {
-      startDeviceDownload(video, options)
+      await startDeviceDownload(video, options)
       return
     }
 
@@ -1413,6 +1408,12 @@ function App() {
       ) : null}
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+      <DeviceDownloads items={deviceDownloads}
+        onDismiss={(id) => setDeviceDownloads((current) => current.filter((item) => item.job.id !== id))}
+        onRetry={(item) => {
+          setDeviceDownloads((current) => current.filter((entry) => entry.job.id !== item.job.id))
+          void startDeviceDownload(item.video, item.options)
+        }} />
       <AudioPlayer
         variant={isMusic ? 'music' : 'video'}
         playRequest={playRequest}

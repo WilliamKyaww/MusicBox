@@ -3,12 +3,19 @@ const { randomBytes } = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { startBackend } = require('./backend.cjs')
+const { isDeviceVideo, reserveDownload } = require('./downloads.cjs')
 const { APP_ID, desktopRequestHeaders, proxyDesktopRequest } = require('./network.cjs')
 
 app.setName('MusicBox')
 app.setAppUserModelId(APP_ID)
 const smokeTest = process.argv.includes('--smoke-test')
 if (smokeTest) app.setPath('userData', fs.mkdtempSync(path.join(app.getPath('temp'), 'musicbox-desktop-smoke-')))
+const downloadSmoke = smokeTest && process.env.MUSICBOX_SMOKE_DOWNLOADS === '1'
+if (downloadSmoke) {
+  const directory = path.join(app.getPath('userData'), 'test-downloads')
+  fs.mkdirSync(directory)
+  app.setPath('downloads', directory)
+}
 protocol.registerSchemesAsPrivileged([{ scheme: 'musicbox', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true,
 } }])
@@ -68,6 +75,9 @@ async function launch() {
     if (!isInternalUrl(request.url) || (request.initiatorOrigin && request.initiatorOrigin !== appUrl)) {
       return new Response('Forbidden', { status: 403 })
     }
+    if (downloadSmoke && new URL(request.url).pathname === '/api/downloads/direct' && new URL(request.url).searchParams.get('smoke_fixture') === '1') {
+      return new Response('MusicBox download fixture', { headers: { 'Content-Type': 'video/mp4', 'Content-Disposition': 'attachment; filename="MusicBox test clip.mp4"' } })
+    }
     const response = await proxyDesktopRequest(request, backend.baseUrl, token, fetch)
     const responseHeaders = new Headers(response.headers)
     responseHeaders.set('Content-Security-Policy', contentSecurityPolicy)
@@ -81,8 +91,23 @@ async function launch() {
   })
   ownSession.setPermissionCheckHandler((contents, permission) => Boolean(contents && isInternalUrl(contents.getURL()) && ['fullscreen', 'clipboard-sanitized-write'].includes(permission)))
   ownSession.on('will-download', (_event, item) => {
-    item.setSaveDialogOptions({ title: 'Save from MusicBox', defaultPath: path.join(app.getPath('downloads'), path.basename(item.getFilename())) })
+    let savePath
+    try {
+      if (isDeviceVideo(item)) {
+        savePath = reserveDownload(app.getPath('downloads'), item.getFilename())
+        item.setSavePath(savePath)
+      } else {
+        item.setSaveDialogOptions({ title: 'Save from MusicBox', defaultPath: path.join(app.getPath('downloads'), path.basename(item.getFilename())) })
+      }
+    } catch (error) {
+      log(`Download save failed: ${error.message}\n`)
+      item.cancel()
+      void dialog.showMessageBox({ type: 'error', message: 'The file could not be saved to Downloads.', detail: 'Check that the folder is writable and try again.' })
+    }
     item.once('done', (_event, state) => {
+      if (savePath && state !== 'completed') {
+        try { if (fs.statSync(savePath).size === 0) fs.unlinkSync(savePath) } catch { /* The download may already have removed its placeholder. */ }
+      }
       if (state === 'interrupted' && !quitting) void dialog.showMessageBox({ type: 'error', message: 'The file could not be saved. Please try again.' })
     })
   })
@@ -144,6 +169,56 @@ async function launch() {
     }
     if (process.env.MUSICBOX_SMOKE_SCREENSHOT) {
       fs.writeFileSync(process.env.MUSICBOX_SMOKE_SCREENSHOT, (await mainWindow.webContents.capturePage()).toPNG())
+    }
+    if (downloadSmoke) {
+      const existing = path.join(app.getPath('downloads'), 'MusicBox test clip.mp4')
+      fs.writeFileSync(existing, 'Existing file')
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Device download did not finish.')), 15000)
+        ownSession.once('will-download', (_event, item) => {
+          item.once('done', (_event, state) => {
+            clearTimeout(timer)
+            try {
+              if (state !== 'completed' || fs.readFileSync(existing, 'utf8') !== 'Existing file' || item.getSavePath() !== path.join(app.getPath('downloads'), 'MusicBox test clip (1).mp4') || fs.readFileSync(item.getSavePath(), 'utf8') !== 'MusicBox download fixture') throw new Error('Automatic download or collision protection failed.')
+              resolve()
+            } catch (error) { reject(error) }
+          })
+        })
+        mainWindow.webContents.executeJavaScript("(() => { const link = document.createElement('a'); link.href = '/api/downloads/direct?media_kind=video&smoke_fixture=1'; link.download = ''; document.body.append(link); link.click(); link.remove(); })()").catch(reject)
+      })
+      const previousHash = await mainWindow.webContents.executeJavaScript('location.hash')
+      await mainWindow.webContents.executeJavaScript("location.hash = '#/watch?v=smoke-back-test'")
+      const backWorks = await mainWindow.webContents.executeJavaScript(`new Promise(resolve => { const deadline = Date.now() + 10000; const check = () => { const button = document.querySelector('.watch-navigation button'); if (button) { button.click(); setTimeout(() => resolve(location.hash === ${JSON.stringify(previousHash || '#/')}), 500); } else if (Date.now() > deadline) resolve(false); else setTimeout(check, 100); }; check(); })`)
+      if (!backWorks) throw new Error('Watch-page Back button did not return to the previous page.')
+      console.log('MUSICBOX_DOWNLOAD_AND_BACK_SMOKE_OK')
+      if (process.env.MUSICBOX_SMOKE_CLIP === '1') {
+        const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+          const response = await fetch('/api/downloads/device', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ video_id: 'iHvmTok4xYA', title: 'MusicBox real clip test', media_kind: 'video', video_quality: '720', section: { start_seconds: 1960, end_seconds: 1990 } }) });
+          if (!response.ok) throw new Error('Could not queue the smoke clip.');
+          let job = await response.json();
+          const deadline = Date.now() + 120000;
+          while (['queued', 'preparing'].includes(job.status) && Date.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            job = await (await fetch('/api/downloads/device/' + job.id)).json();
+          }
+          if (job.status !== 'ready') throw new Error(job.detail || 'Clip preparation timed out.');
+          return job;
+        })()`)
+        const savedFile = await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('Prepared clip did not save.')), 30000)
+          ownSession.once('will-download', (_event, item) => item.once('done', (_event, state) => {
+            clearTimeout(timer)
+            if (state === 'completed') resolve(item.getSavePath())
+            else reject(new Error(`Prepared clip save ended with ${state}.`))
+          }))
+          mainWindow.webContents.executeJavaScript(`(() => { const a = document.createElement('a'); a.download = ''; a.href = ${JSON.stringify(result.download_path)}; document.body.append(a); a.click(); a.remove(); })()`).catch(reject)
+        })
+        if (fs.statSync(savedFile).size < 100000) throw new Error('Saved clip is too small.')
+        const probe = require('node:child_process').execFileSync(path.join(process.resourcesPath, 'tools/ffprobe.exe'), ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', savedFile], { encoding: 'utf8', windowsHide: true, timeout: 10000 })
+        const media = JSON.parse(probe)
+        if (Math.abs(Number(media.format.duration) - 30) > 0.5 || !media.streams.some(stream => stream.codec_type === 'audio') || !media.streams.some(stream => stream.codec_type === 'video')) throw new Error('Saved clip is missing its expected audio, video or duration.')
+        console.log(`MUSICBOX_REAL_CLIP_SAVE_OK duration=${media.format.duration} bytes=${fs.statSync(savedFile).size}`)
+      }
     }
     console.log('MUSICBOX_DESKTOP_SMOKE_OK')
     app.quit()

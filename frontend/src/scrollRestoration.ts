@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect } from 'react'
 
 const positions = new Map<string, number>()
 let entryCounter = 0
+let previousEntryKey: string | null = null
 
 function currentEntryKey(): string | null {
   const state = window.history.state as { musicboxKey?: string } | null
@@ -16,11 +17,15 @@ function currentEntryKey(): string | null {
 
 function ensureEntryKey() {
   const existing = currentEntryKey()
-  if (existing) return { key: existing, isNew: false }
+  if (existing) {
+    previousEntryKey = existing
+    return { key: existing, isNew: false }
+  }
 
   entryCounter += 1
   const key = `${Date.now()}-${entryCounter}`
-  window.history.replaceState({ ...(window.history.state ?? {}), musicboxKey: key }, '')
+  window.history.replaceState({ ...(window.history.state ?? {}), musicboxKey: key, musicboxCanGoBack: previousEntryKey !== null }, '')
+  previousEntryKey = key
   return { key, isNew: true }
 }
 

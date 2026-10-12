@@ -937,3 +937,27 @@
   margin: 0;
   font-size: 1.125rem;
 }
+.device-downloads {
+  position: fixed;
+  inset-inline-end: 16px;
+  bottom: 104px;
+  z-index: 100;
+  width: min(380px, calc(100vw - 32px));
+  max-height: 50vh;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+}
+
+.device-download {
+  padding: 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.device-download p { margin: 8px 0; font-size: 0.875rem; }
+.device-download progress { width: 100%; accent-color: var(--accent); }
+.device-download__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

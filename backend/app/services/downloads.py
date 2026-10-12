@@ -104,6 +104,19 @@ class DownloadRuntimeError(RuntimeError):
     """Raised when the local machine is missing a tool required for downloads."""
 
 
+def _download_media(ydl, source_url, has_section, progress_hook=None, cancelled=None):
+    if not has_section:
+        return ydl.download([source_url])
+    from app.services.media_range_proxy import MediaRangeProxy
+    info = ydl.extract_info(source_url, download=False)
+    if progress_hook:
+        progress_hook({"status": "cutting"})
+    ydl.params["format"] = info["format_id"]
+    with MediaRangeProxy(ydl, cancelled) as proxy:
+        proxy.wrap(info)
+        return ydl.process_ie_result(info, download=True)
+
+
 @dataclass(slots=True)
 class DirectDownload:
     """A one-off download that is streamed to the caller and then discarded."""
@@ -612,6 +625,10 @@ class DownloadManager:
             "no_warnings": True,
             "ffmpeg_location": ffmpeg_binary,
             "progress_hooks": progress_hooks,
+            "socket_timeout": 20,
+            "retries": 2,
+            "fragment_retries": 2,
+            "external_downloader_args": {"ffmpeg_i": ["-rw_timeout", "20000000"]},
         }
 
         if media_kind == "video":
@@ -652,6 +669,11 @@ class DownloadManager:
                 ],
             )
             ydl_opts["force_keyframes_at_cuts"] = True
+            if media_kind == "video":
+                ydl_opts["external_downloader_args"]["ffmpeg_o"] = [
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+                ]
 
         if self.settings.youtube_cookies_file:
             ydl_opts["cookiefile"] = self.settings.youtube_cookies_file
@@ -758,7 +780,7 @@ class DownloadManager:
             source_url = self._jobs[job_id].source_url
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([source_url])
+            _download_media(ydl, source_url, section_start_seconds > 0 or section_end_seconds is not None, progress_hook)
 
         if self._is_cancelled(job_id):
             raise DownloadCancelled("The download was cancelled.")
@@ -786,7 +808,7 @@ class DownloadManager:
             error_message=None,
         )
 
-    def prepare_direct_download(self, request: DownloadRequest) -> DirectDownload:
+    def prepare_direct_download(self, request: DownloadRequest, *, progress_hook=None, cancelled=None, task_id=None) -> DirectDownload:
         """Download straight to a scratch folder for immediate delivery to the device.
 
         Nothing is added to the saved-songs registry; the caller is responsible for
@@ -821,22 +843,33 @@ class DownloadManager:
             section_end_seconds=section.end_seconds,
             output_template=str(scratch_dir / f"{safe_base_name}.%(ext)s"),
             ffmpeg_binary=ffmpeg_binary,
-            progress_hooks=[],
+            progress_hooks=[progress_hook] if progress_hook else [],
         )
         source_url = str(
             request.source_url or f"https://www.youtube.com/watch?v={request.video_id}"
         )
 
-        self._worker_semaphore.acquire()
+        while not self._worker_semaphore.acquire(timeout=0.2):
+            if cancelled and cancelled.is_set():
+                shutil.rmtree(scratch_dir, ignore_errors=True)
+                raise DownloadCancelled("Download cancelled.")
+        _job_context.job_id = task_id
         try:
+            if cancelled and cancelled.is_set():
+                raise DownloadCancelled("Download cancelled.")
+            if progress_hook:
+                progress_hook({})
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([source_url])
+                _download_media(ydl, source_url, not section.is_full, progress_hook, cancelled)
 
             final_file = self._locate_final_file(scratch_dir, request.media_kind)
         except Exception:
             shutil.rmtree(scratch_dir, ignore_errors=True)
             raise
         finally:
+            _job_context.job_id = None
+            if task_id:
+                _forget_job_processes(task_id)
             self._worker_semaphore.release()
 
         if final_file is None:

@@ -15,6 +15,32 @@ export const DEFAULT_DOWNLOAD_OPTIONS: DownloadOptions = {
   section: { startSeconds: 0, endSeconds: null },
 }
 
+export type DeviceDownload = {
+  id: string
+  status: 'queued' | 'preparing' | 'ready' | 'failed' | 'cancelled'
+  detail: string
+  progress: number | null
+  download_path: string | null
+}
+
+export function prepareDeviceDownload(video: VideoSearchResult, options: DownloadOptions) {
+  return apiFetchJson<DeviceDownload>('/api/downloads/device', {
+    method: 'POST',
+    body: JSON.stringify({ video_id: video.id, title: video.title,
+      channel_title: video.channel_title, source_url: video.video_url,
+      media_kind: options.mediaKind, video_quality: options.videoQuality,
+      section: { start_seconds: options.section.startSeconds, end_seconds: options.section.endSeconds } }),
+  })
+}
+
+export function fetchDeviceDownload(id: string) {
+  return apiFetchJson<DeviceDownload>(`/api/downloads/device/${id}`, { signal: AbortSignal.timeout(10000) })
+}
+
+export function cancelDeviceDownload(id: string) {
+  return apiFetchJson<DeviceDownload>(`/api/downloads/device/${id}`, { method: 'DELETE', signal: AbortSignal.timeout(10000) })
+}
+
 export async function fetchDownloads(signal?: AbortSignal) {
   return apiFetchJson<DownloadListResponse>('/api/downloads', {
     method: 'GET',

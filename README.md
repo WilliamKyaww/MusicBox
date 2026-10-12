@@ -197,7 +197,13 @@ On the watch page, press **Clip** under the video:
 2. Press **Preview** to play just that section.
 3. Press **Download section…**. The download dialogue opens with the range filled in.
 
-Device downloads are built on demand and streamed back as a file attachment, so nothing is added to the library. Because the file is prepared server-side first, a long section takes a while before the browser starts saving it.
+Device downloads prepare in the background. A persistent **Device downloads** panel shows the current stage and a **Cancel download** button. Once ready, the file is sent to your device automatically; **Save again** repeats delivery without rebuilding the clip. Preparation failures show a readable error and **Retry**. Preparation does not add anything to your saved library. Keep the app open until the file is ready.
+
+For YouTube clips, the backend reads small, finite byte ranges and passes them to FFmpeg locally for cutting. This avoids stalled open-ended reads directly from FFmpeg. Video clips are encoded as H.264/AAC MP4 for compatibility, retaining the chosen section and quality limit. Larger or higher-quality clips can still take longer to prepare.
+
+In the Windows desktop app, **Download to this device** saves videos and clips automatically to your Windows **Downloads** folder (normally `C:\Users\willi\Downloads`). Existing filenames are kept: another copy receives a suffix such as `clip (1).mp4`. **Save to library** still uses MusicBox's managed library. Temporary preparation under `_direct` is unchanged. In the web app, your browser controls the download location and whether to ask where to save.
+
+The Video watch page has a sticky **Back** button. It returns to the previous app page using the existing history and scroll restoration, retaining search parameters and filters. A directly opened video without an earlier app page returns home instead of leaving MusicBox.
 
 ## Notes
 
@@ -205,6 +211,6 @@ Device downloads are built on demand and streamed back as a file attachment, so 
 - Trending videos, upload dates, channel avatars and search need a YouTube API key. Channel pages, playback and downloads work without it, and pages that need the key link to Settings. The key is sent to YouTube in a request header rather than in the URL.
 - `backend/.env` is gitignored and intended to stay local only.
 - Downloaded MP3 and MP4 files under `backend/data/downloads/` are also gitignored.
-- Device downloads are built in `backend/data/downloads/_direct/` and deleted once the response has been sent; the folder is also cleared on backend startup.
+- Device downloads prepare in `backend/data/downloads/_direct/` (under `%APPDATA%\MusicBox\data\downloads\_direct` in the installed app). Completed files remain temporarily available for retry/range requests; they expire one hour after preparation or the last save request and are removed on a subsequent device-download operation, or on backend startup. The older direct-download endpoint still cleans up after its response. Device preparation jobs are temporary and do not resume after restarting the backend.
 - Playlists are persisted locally through a lightweight JSON registry.
 - Section downloads and video merging both rely on `ffmpeg`, so `FFMPEG_BINARY` must resolve for those features to work.

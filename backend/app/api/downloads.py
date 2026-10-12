@@ -26,6 +26,47 @@ from app.services.downloads import (
 router = APIRouter()
 
 
+@router.post('/downloads/device', status_code=202)
+def prepare_device_download(request: DownloadRequest):
+    from app.services.device_downloads import device_downloads
+    try:
+        return device_downloads.start(request)
+    except ValueError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@router.get('/downloads/device/{task_id}')
+def device_download_status(task_id: str):
+    from app.services.device_downloads import device_downloads
+    try:
+        return device_downloads.status(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail='This device download expired. Please start it again.') from error
+
+
+@router.delete('/downloads/device/{task_id}')
+def cancel_device_download(task_id: str):
+    from app.services.device_downloads import device_downloads
+    try:
+        return device_downloads.cancel(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail='Device download not found.') from error
+
+
+@router.get('/downloads/device/{task_id}/file')
+def device_download_file(task_id: str):
+    from app.services.device_downloads import device_downloads
+    try:
+        result = device_downloads.file(task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail='This device download expired. Please start it again.') from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    # Retain briefly for Chromium retries/ranges; startup and expiry remove scratch files.
+    return FileResponse(result.file_path, media_type=result.media_type,
+                        filename=result.file_name, headers={'Cache-Control': 'no-store'})
+
+
 @router.get("/downloads", response_model=DownloadListResponse)
 async def list_downloads() -> DownloadListResponse:
     manager = get_download_manager()
