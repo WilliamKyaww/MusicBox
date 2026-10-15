@@ -33,6 +33,7 @@ import { VideoPlayer, type VideoPlayerHandle } from '../player/VideoPlayer'
 import { ClipPanel } from '../watch/ClipPanel'
 import { CommentsSection } from '../watch/CommentsSection'
 import { DescriptionBox } from '../watch/DescriptionBox'
+import { TranscriptPanel } from '../watch/TranscriptPanel'
 import { UpNext, WatchPlaylistPanel } from '../watch/UpNext'
 import type { ClipRange, VideoDetails, VideoSearchResult } from '../types'
 
@@ -148,6 +149,7 @@ function WatchView({ details, startSeconds, listId, watchQueue }: WatchViewProps
   const { autoplay, theater } = useLibrary((state) => state.prefs)
   const [initialStart] = useState(() => startSeconds ?? getResumePosition(details.id) ?? 0)
   const [clip, setClip] = useState<ClipRange | null>(null)
+  const [transcriptOpen, setTranscriptOpen] = useState(false)
   const duration = details.duration_seconds ?? 0
   const video = detailsToVideo(details)
 
@@ -179,6 +181,8 @@ function WatchView({ details, startSeconds, listId, watchQueue }: WatchViewProps
   const handlePlayNext = useCallback(() => {
     if (nextVideo) navigate(paths.watch(nextVideo.id, { listId: nextListId }))
   }, [nextVideo, nextListId])
+
+  const getCurrentTime = useCallback(() => playerRef.current?.getCurrentTime() ?? 0, [])
 
   function seekTo(seconds: number) {
     playerRef.current?.seekTo(seconds)
@@ -395,7 +399,12 @@ function WatchView({ details, startSeconds, listId, watchQueue }: WatchViewProps
           />
         ) : null}
 
-        <DescriptionBox details={details} onSeek={seekTo} />
+        <DescriptionBox
+          details={details}
+          onSeek={seekTo}
+          transcriptOpen={transcriptOpen}
+          onShowTranscript={() => setTranscriptOpen(true)}
+        />
 
         <CommentsSection
           videoId={details.id}
@@ -407,6 +416,15 @@ function WatchView({ details, startSeconds, listId, watchQueue }: WatchViewProps
       </div>
 
       <aside className="watch__secondary">
+        {transcriptOpen ? (
+          <TranscriptPanel
+            videoId={details.id}
+            tracks={details.captions}
+            getCurrentTime={getCurrentTime}
+            onSeek={(seconds) => playerRef.current?.seekTo(seconds)}
+            onClose={() => setTranscriptOpen(false)}
+          />
+        ) : null}
         {playlist.data ? (
           <WatchPlaylistPanel playlist={playlist.data} currentVideoId={details.id} />
         ) : null}

@@ -167,6 +167,8 @@ Every video card has a ⋮ menu to listen to audio only, download, save to a pla
 
 Video cards, search and Up Next rows, and the watch-page description show both the relative upload time and the full date, for example `2 weeks ago · 13th September 2026`. Dates use the UK calendar and wrap on narrow screens instead of being cut off.
 
+Expanding a video's description shows a **Transcript** section with a **Show transcript** button (when the video has captions). It opens a panel above Up Next, or below the video on narrow screens, with timed lines that follow playback, click-to-seek, a language picker and a timestamps toggle.
+
 ## Watching
 
 The watch page plays videos in the app at up to the best quality YouTube offers, including 1440p and 4K. YouTube serves HD as separate video and audio files, and the player keeps the two in sync. It has:

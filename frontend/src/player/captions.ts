@@ -56,22 +56,35 @@ export function activeCueText(cues: CaptionCue[], time: number) {
   return lines.slice(-2).join('\n')
 }
 
-type CaptionState = { url: string | null; cues: CaptionCue[] }
+type CaptionState = { url: string | null; cues: CaptionCue[]; failed: boolean }
 
-export function useCaptionCues(url: string | null) {
-  const [state, setState] = useState<CaptionState>({ url: null, cues: [] })
+/** Cues plus whether they are still loading or could not be loaded. */
+export function useCaptionTrack(url: string | null) {
+  const [state, setState] = useState<CaptionState>({ url: null, cues: [], failed: false })
 
   useEffect(() => {
     if (!url) return
     const controller = new AbortController()
     fetch(url, { signal: controller.signal })
-      .then((response) => (response.ok ? response.text() : ''))
-      .then((text) => setState({ url, cues: parseVtt(text) }))
+      .then((response) => {
+        if (!response.ok) throw new Error('Captions unavailable')
+        return response.text()
+      })
+      .then((text) => setState({ url, cues: parseVtt(text), failed: false }))
       .catch(() => {
-        if (!controller.signal.aborted) setState({ url, cues: [] })
+        if (!controller.signal.aborted) setState({ url, cues: [], failed: true })
       })
     return () => controller.abort()
   }, [url])
 
-  return state.url === url ? state.cues : []
+  const isCurrent = state.url === url
+  return {
+    cues: isCurrent ? state.cues : [],
+    failed: isCurrent && state.failed,
+    isLoading: url !== null && !isCurrent,
+  }
+}
+
+export function useCaptionCues(url: string | null) {
+  return useCaptionTrack(url).cues
 }

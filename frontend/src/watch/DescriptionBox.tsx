@@ -7,9 +7,16 @@ import type { VideoDetails } from '../types'
 type DescriptionBoxProps = {
   details: VideoDetails
   onSeek: (seconds: number) => void
+  transcriptOpen: boolean
+  onShowTranscript: () => void
 }
 
-export function DescriptionBox({ details, onSeek }: DescriptionBoxProps) {
+export function DescriptionBox({
+  details,
+  onSeek,
+  transcriptOpen,
+  onShowTranscript,
+}: DescriptionBoxProps) {
   const [expanded, setExpanded] = useState(false)
   const isLive = details.live_status === 'is_live'
   const tags = details.tags.slice(0, 3)
@@ -66,6 +73,24 @@ export function DescriptionBox({ details, onSeek }: DescriptionBoxProps) {
               </li>
             ))}
           </ol>
+        </div>
+      ) : null}
+
+      {expanded && details.captions.length > 0 ? (
+        <div className="description__transcript">
+          <h3>Transcript</h3>
+          <p>Follow along using the transcript.</p>
+          <button
+            type="button"
+            className="yt-pill"
+            onClick={(event) => {
+              event.stopPropagation()
+              onShowTranscript()
+            }}
+            disabled={transcriptOpen}
+          >
+            Show transcript
+          </button>
         </div>
       ) : null}
 
