@@ -400,3 +400,11 @@ export function ExternalLinkIcon({ className }: IconProps) {
 export function SortIcon({ className }: IconProps) {
   return <FilledIcon className={className} d="M3 18h6v-2H3v2ZM3 6v2h18V6H3Zm0 7h12v-2H3v2Z" />
 }
+
+export function FolderIcon({ className }: IconProps) {
+  return <FilledIcon className={className} d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2Z" />
+}
+
+export function AlertIcon({ className }: IconProps) {
+  return <FilledIcon className={className} d="M11 15h2v2h-2v-2Zm0-8h2v6h-2V7Zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2ZM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8Z" />
+}

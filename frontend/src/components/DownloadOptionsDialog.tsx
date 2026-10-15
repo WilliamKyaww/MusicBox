@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { ModalDialog } from './ModalDialog'
 import { formatSectionLabel, parseTimecode } from '../downloadSections'
+import { getDesktopBridge } from '../desktop'
+import { fileExtension, MAX_FILE_NAME_LENGTH, sanitizeFileName, sectionSuffix } from '../downloadNames'
 import { formatClock } from '../format'
 import type {
   DownloadDestination,
@@ -45,7 +47,9 @@ const DESTINATIONS: { id: DownloadDestination; label: string; hint: string }[] =
   {
     id: 'device',
     label: 'Download to this device',
-    hint: 'Prepares the file and sends it straight to your downloads folder',
+    hint: getDesktopBridge()
+      ? 'Prepares the file and saves it to your MusicBox download folder'
+      : 'Prepares the file and sends it straight to your downloads folder',
   },
 ]
 
@@ -93,6 +97,8 @@ export function DownloadOptionsDialog({
       : '',
   )
   const [validationMessage, setValidationMessage] = useState<string | null>(null)
+  // null means "use the suggested name", so it keeps following the section picked below.
+  const [customName, setCustomName] = useState<string | null>(null)
   const durationSeconds = videoDurationSeconds(video)
 
   type ResolvedSection =
@@ -130,19 +136,39 @@ export function DownloadOptionsDialog({
 
   const resolved = resolveSection()
 
+  // Device downloads are saved under exactly this name, so a clip's suggestion
+  // already carries its time range. Library items are named by title alone.
+  const suggestedName =
+    destination === 'device' && resolved.ok
+      ? `${video.title}${sectionSuffix(resolved.section)}`
+      : video.title
+  const fileName = customName ?? suggestedName
+  const cleanName = sanitizeFileName(fileName)
+  const extension = fileExtension(mediaKind)
+
   function handleConfirm() {
     if (!resolved.ok) {
       setValidationMessage(resolved.error)
       return
     }
 
+    if (!cleanName) {
+      setValidationMessage('Enter a name for the file.')
+      return
+    }
+
     setValidationMessage(null)
-    onConfirm(video, {
-      mediaKind,
-      videoQuality,
-      destination,
-      section: resolved.section,
-    })
+    onConfirm(
+      // Library items keep the exact title typed; device files get the cleaned file name.
+      { ...video, title: destination === 'device' ? cleanName : fileName.trim() },
+      {
+        mediaKind,
+        videoQuality,
+        destination,
+        section: resolved.section,
+        exactFilename: destination === 'device',
+      },
+    )
   }
 
   return (
@@ -157,6 +183,45 @@ export function DownloadOptionsDialog({
       onCancel={onCancel}
     >
       <div className="download-options">
+        <div className="download-options__group">
+          <label className="download-options__name" htmlFor="download-file-name">
+            <span className="download-options__legend">
+              {destination === 'device' ? 'File name' : 'Name'}
+            </span>
+            <span className="download-options__name-input">
+              <input
+                id="download-file-name"
+                type="text"
+                value={fileName}
+                maxLength={200}
+                spellCheck={false}
+                placeholder={video.title}
+                onChange={(event) => {
+                  setCustomName(event.target.value)
+                  setValidationMessage(null)
+                }}
+              />
+              {customName !== null && customName !== suggestedName ? (
+                <button
+                  type="button"
+                  className="download-options__name-reset"
+                  onClick={() => setCustomName(null)}
+                >
+                  Reset
+                </button>
+              ) : null}
+            </span>
+          </label>
+          <p className="download-options__summary download-options__summary--tight">
+            {cleanName
+              ? destination === 'device'
+                ? `Saved as ${cleanName}.${extension}`
+                : `Appears in Saved Songs as "${cleanName}"`
+              : 'Enter a name to continue.'}
+            {cleanName.length >= MAX_FILE_NAME_LENGTH ? ' (shortened to fit)' : ''}
+          </p>
+        </div>
+
         <fieldset className="download-options__group">
           <legend className="download-options__legend">Format</legend>
           <div className="download-options__choices">

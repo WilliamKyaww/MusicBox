@@ -169,6 +169,8 @@ Video cards, search and Up Next rows, and the watch-page description show both t
 
 Expanding a video's description shows a **Transcript** section with a **Show transcript** button (when the video has captions). It opens a panel above Up Next, or below the video on narrow screens, with timed lines that follow playback, click-to-seek, a language picker and a timestamps toggle.
 
+The download dialog has a **File name** field. Clips are suggested as `Title (1m00s-1m30s)`; whatever you type is the name the file is saved under. Downloads to this device show a notification card with progress, a Cancel button, and, in the desktop app, where the file was saved with a **Show in folder** button. The desktop app saves device downloads to a `MusicBox` folder inside your Downloads folder (created for you); change it under **Settings → Downloads**. The web app can't choose a folder, because the browser decides where downloads go.
+
 ## Watching
 
 The watch page plays videos in the app at up to the best quality YouTube offers, including 1440p and 4K. YouTube serves HD as separate video and audio files, and the player keeps the two in sync. It has:

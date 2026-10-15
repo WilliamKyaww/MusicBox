@@ -65,7 +65,7 @@ test('preparation errors are visible and retry starts a new task that can be can
   await startClip(page)
   const panel = page.getByRole('complementary', { name: 'Device downloads' })
   await expect(panel.getByText('YouTube refused the source. Try again.')).toBeVisible()
-  await panel.getByRole('button', { name: 'Retry' }).click()
+  await panel.getByRole('button', { name: 'Try again' }).click()
   await panel.getByRole('button', { name: 'Cancel download' }).click()
   await expect(panel.getByText('Download cancelled.')).toBeVisible()
   expect(count).toBe(2)

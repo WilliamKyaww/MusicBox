@@ -828,7 +828,11 @@ class DownloadManager:
             )
 
         section = request.section or DownloadSection()
-        section_suffix = _section_suffix(section.start_seconds, section.end_seconds)
+        section_suffix = (
+            ""
+            if request.exact_filename
+            else _section_suffix(section.start_seconds, section.end_seconds)
+        )
         title = _decode_text(request.title or request.video_id)
         safe_base_name = _sanitize_filename(f"{title}{section_suffix}")
         scratch_dir = (

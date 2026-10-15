@@ -30,4 +30,54 @@ function reserveDownload(directory, filename) {
   }
 }
 
-module.exports = { isDeviceVideo, reserveDownload }
+const FOLDER_SETTING = 'DEVICE_DOWNLOADS_DIR'
+
+/** Reads one value the way the backend's dotenv file stores it; the last assignment wins. */
+function readConfigValue(configFile, key) {
+  let text
+  try { text = fs.readFileSync(configFile, 'utf8') } catch { return '' }
+  let value = ''
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/.exec(line)
+    if (!match || match[1] !== key) continue
+    const raw = match[2].trim()
+    if (raw.length >= 2 && raw.startsWith("'") && raw.endsWith("'")) value = raw.slice(1, -1)
+    else if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) value = raw.slice(1, -1).replace(/\\(["\\])/g, '$1')
+    else value = raw.replace(/\s+#.*$/, '')
+  }
+  return value
+}
+
+/** The folder device downloads go to: the configured one, else Downloads\MusicBox. */
+function resolveDownloadFolder(configFile, downloadsPath) {
+  const defaultFolder = path.join(downloadsPath, 'MusicBox')
+  const configured = readConfigValue(configFile, FOLDER_SETTING).trim()
+  const usable = configured && path.isAbsolute(configured) ? path.normalize(configured) : ''
+  return { folder: usable || defaultFolder, defaultFolder, isDefault: !usable }
+}
+
+/** Resolves the folder and makes sure it exists, falling back so a save never fails on a bad setting. */
+function prepareDownloadFolder(configFile, downloadsPath, onProblem = () => {}) {
+  const resolved = resolveDownloadFolder(configFile, downloadsPath)
+  for (const candidate of [resolved.folder, resolved.defaultFolder]) {
+    try {
+      fs.mkdirSync(candidate, { recursive: true })
+      fs.accessSync(candidate, fs.constants.W_OK)
+      return { ...resolved, folder: candidate, isDefault: candidate === resolved.defaultFolder }
+    } catch (error) {
+      onProblem(`Download folder ${candidate} is not usable: ${error.message}`)
+    }
+  }
+  return { ...resolved, folder: downloadsPath, isDefault: false }
+}
+
+/** The preparation job id inside a device download URL, or null for other downloads. */
+function deviceDownloadId(url) {
+  try {
+    return /^\/api\/downloads\/device\/([^/]+)\/file$/.exec(new URL(url).pathname)?.[1] ?? null
+  } catch { return null }
+}
+
+module.exports = {
+  isDeviceVideo, reserveDownload, readConfigValue, resolveDownloadFolder, prepareDownloadFolder, deviceDownloadId,
+}

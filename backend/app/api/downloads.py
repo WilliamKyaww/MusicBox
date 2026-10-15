@@ -102,6 +102,7 @@ async def download_direct(
     video_quality: Annotated[VideoQuality, Query()] = "best",
     start_seconds: Annotated[int, Query(ge=0)] = 0,
     end_seconds: Annotated[int | None, Query(gt=0)] = None,
+    exact_filename: bool = False,
 ) -> FileResponse:
     """Download a video (or just its audio) straight to the caller's device.
 
@@ -128,6 +129,7 @@ async def download_direct(
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
             ),
+            exact_filename=exact_filename,
         )
     except ValueError as exc:
         raise HTTPException(

@@ -813,3 +813,56 @@ plus a check mark. */
     transform: translateY(8px);
   }
 }
+
+.download-options__name {
+  display: grid;
+  gap: 4px;
+}
+
+.download-options__name .download-options__legend {
+  padding-bottom: 0;
+}
+
+.download-options__name-input {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: var(--input-bg);
+}
+
+.download-options__name-input:focus-within {
+  border-color: var(--accent);
+}
+
+.download-options__name-input input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+}
+
+.download-options__name-reset {
+  height: 100%;
+  padding: 0 14px;
+  border: 0;
+  border-left: 1px solid var(--surface-border);
+  border-radius: 0 12px 12px 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.download-options__summary--tight {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}

@@ -8,6 +8,8 @@ import {
   type SettingValue,
 } from '../api/settings'
 import { Switch } from '../components/Switch'
+import { FolderIcon } from '../components/Icons'
+import { getDesktopBridge, type DownloadFolderInfo } from '../desktop'
 import type { Experience } from '../experience'
 import { clearHistory, useLibrary } from '../library'
 import { SHORTCUTS } from '../music/shortcuts'
@@ -18,6 +20,7 @@ type Status = { tone: 'success' | 'error'; text: string } | null
 
 const SECTIONS = [
   ['connections', 'Connections'],
+  ['downloads', 'Downloads'],
   ['playback', 'Playback'],
   ['appearance', 'Appearance'],
   ['privacy', 'Privacy and Data'],
@@ -239,7 +242,108 @@ function ValueField({
   )
 }
 
-function ConnectionSettings() {
+const DOWNLOAD_FOLDER_KEY = 'DEVICE_DOWNLOADS_DIR'
+
+/** Where "Download to this device" saves files; choosable in the desktop app only. */
+function DownloadFolderSetting() {
+  const desktop = getDesktopBridge()
+  const [info, setInfo] = useState<DownloadFolderInfo | null>(null)
+  const [field, setField] = useState<SettingField | null>(null)
+  const [readOnlyReason, setReadOnlyReason] = useState<string | null>(null)
+  const [status, setStatus] = useState<Status>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchSettings(controller.signal)
+      .then((response) => {
+        setField(response.fields.find((candidate) => candidate.key === DOWNLOAD_FOLDER_KEY) ?? null)
+        setReadOnlyReason(response.read_only_reason)
+      })
+      .catch(() => {
+        /* The folder is still shown; saving reports its own error. */
+      })
+    void desktop?.getDownloadFolder().then(setInfo)
+    return () => controller.abort()
+  }, [desktop])
+
+  async function change(value: string | null) {
+    setBusy(true)
+    setStatus(null)
+    try {
+      const response = await saveSettings({ [DOWNLOAD_FOLDER_KEY]: value })
+      setField(response.fields.find((candidate) => candidate.key === DOWNLOAD_FOLDER_KEY) ?? null)
+      const next = await desktop?.getDownloadFolder()
+      if (next) setInfo(next)
+      setStatus({
+        tone: 'success',
+        text: value ? 'New downloads will be saved to this folder.' : 'Downloads go back to the MusicBox folder in Downloads.',
+      })
+    } catch (error) {
+      setStatus({ tone: 'error', text: error instanceof Error ? error.message : 'The folder could not be saved.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function choose() {
+    const folder = await desktop?.chooseDownloadFolder()
+    if (folder) await change(folder)
+  }
+
+  if (!desktop) {
+    return (
+      <Row
+        title="Download Folder"
+        description="Videos and clips you download to this device are saved by your browser, to whichever folder its download settings use. The MusicBox desktop app lets you choose a folder here, and keeps it in a MusicBox folder inside Downloads by default."
+      />
+    )
+  }
+
+  const locked = Boolean(field?.locked) || Boolean(readOnlyReason)
+  return (
+    <Row
+      title="Download Folder"
+      description="Videos and clips downloaded to this device are saved here. MusicBox creates the folder for you."
+      note={field?.locked ? 'Set by an environment variable, so it can only be changed there.' : readOnlyReason ?? undefined}
+      control={
+        <div className="settings-folder">
+          <div className="settings-folder__path" title={info?.folder}>
+            <FolderIcon className="settings-folder__icon" />
+            <span>{info?.folder ?? 'Looking up the folder...'}</span>
+            {info?.isDefault ? <span className="settings-chip">Default</span> : null}
+          </div>
+          <div className="settings-buttons">
+            <button type="button" className="settings-button" onClick={() => void desktop.openDownloadFolder()}>
+              Open folder
+            </button>
+            {info && !info.isDefault ? (
+              <button type="button" className="settings-button" disabled={busy || locked} onClick={() => void change(null)}>
+                Reset to default
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="settings-button settings-button--primary"
+              disabled={busy || locked}
+              onClick={() => void choose()}
+            >
+              Change folder
+            </button>
+          </div>
+          {status ? (
+            <p className={`settings-message settings-message--${status.tone}`} role="status">
+              {status.text}
+            </p>
+          ) : null}
+        </div>
+      }
+    />
+  )
+}
+
+/** The backend-driven settings, optionally limited to some groups (the page splits them across sections). */
+function RegistrySettings({ only, except = [] }: { only?: string[]; except?: string[] }) {
   const [data, setData] = useState<SettingsResponse | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>(null)
@@ -309,11 +413,14 @@ function ConnectionSettings() {
         </p>
       ) : null}
       {data.groups.map((group) => {
-        const fields = data.fields.filter((field) => field.group === group.id)
+        if ((only && !only.includes(group.id)) || except.includes(group.id)) return null
+        const fields = data.fields.filter(
+          (field) => field.group === group.id && field.key !== DOWNLOAD_FOLDER_KEY,
+        )
         if (!fields.length) return null
         return (
           <div key={group.id} className="settings-group">
-            <h3 className="settings-group__title">{group.label}</h3>
+            {only ? null : <h3 className="settings-group__title">{group.label}</h3>}
             {fields.map((field) => {
               const disabled = readOnly || field.locked
               const note = field.locked
@@ -347,9 +454,11 @@ function ConnectionSettings() {
           </div>
         )
       })}
-      <p className="settings-footnote">
-        Saved on this computer in <code>{data.config_file}</code>. Keys are never shown again after saving.
-      </p>
+      {only ? null : (
+        <p className="settings-footnote">
+          Saved on this computer in <code>{data.config_file}</code>. Keys are never shown again after saving.
+        </p>
+      )}
     </>
   )
 }
@@ -389,7 +498,16 @@ export function SettingsPage({ experience }: { experience: Experience }) {
           title="Connections"
           intro="Keys and accounts MusicBox uses to reach YouTube, Spotify and Discord."
         >
-          <ConnectionSettings />
+          <RegistrySettings except={['downloads']} />
+        </Section>
+
+        <Section
+          id="downloads"
+          title="Downloads"
+          intro="Where files you download to this device are saved."
+        >
+          <DownloadFolderSetting />
+          <RegistrySettings only={['downloads']} />
         </Section>
 
         <Section id="playback" title="Playback">

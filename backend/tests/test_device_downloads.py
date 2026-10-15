@@ -91,6 +91,25 @@ class DeviceDownloadTests(unittest.TestCase):
             proxy.wrap(untouched)
             self.assertEqual(untouched['url'], 'http://localhost/private')
 
+    def test_chosen_file_name_is_passed_through_and_defaults_to_the_suffixed_name(self):
+        seen = []
+        def prepare(request, **kwargs):
+            seen.append(request)
+            raise RuntimeError('stop after recording the request')
+        manager = SimpleNamespace(get_runtime_status=lambda: SimpleNamespace(available=True), prepare_direct_download=prepare)
+        service = DeviceDownloads()
+        app = FastAPI()
+        app.include_router(router, prefix='/api')
+        with patch('app.services.device_downloads.get_download_manager', return_value=manager), patch('app.services.device_downloads.device_downloads', service), TestClient(app) as client:
+            for payload, expected in (({}, False), ({'exact_filename': True}, True)):
+                self.assertEqual(client.post('/api/downloads/device', json={'video_id': 'fixture', 'title': 'My clip', 'media_kind': 'video', **payload}).status_code, 202)
+                for _ in range(100):
+                    if len(seen) and seen[-1].exact_filename == expected:
+                        break
+                    time.sleep(0.01)
+                self.assertEqual(seen[-1].title, 'My clip')
+                self.assertEqual(seen[-1].exact_filename, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

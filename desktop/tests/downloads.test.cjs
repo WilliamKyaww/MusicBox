@@ -47,3 +47,42 @@ test('download names are safe and repeated reservations never overwrite existing
     assert.equal(reserveDownload(directory, 'CON.mp4'), path.join(directory, '_CON.mp4'))
   } finally { fs.rmSync(directory, { recursive: true, force: true }) }
 })
+
+test('the download folder defaults to a MusicBox folder inside Downloads and honours the setting', () => {
+  const { prepareDownloadFolder, readConfigValue, resolveDownloadFolder, deviceDownloadId } = require('../downloads.cjs')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'musicbox-download-folder-'))
+  try {
+    const downloads = path.join(root, 'Downloads')
+    const configFile = path.join(root, 'config.env')
+
+    fs.writeFileSync(configFile, 'YOUTUBE_API_KEY=abc\n')
+    assert.equal(resolveDownloadFolder(configFile, downloads).folder, path.join(downloads, 'MusicBox'))
+    assert.equal(resolveDownloadFolder(configFile, downloads).isDefault, true)
+    assert.equal(resolveDownloadFolder(path.join(root, 'missing.env'), downloads).isDefault, true)
+
+    // The default folder is created ahead of the first save.
+    const prepared = prepareDownloadFolder(configFile, downloads)
+    assert.equal(prepared.folder, path.join(downloads, 'MusicBox'))
+    assert.equal(fs.statSync(prepared.folder).isDirectory(), true)
+
+    // Quoted, double-quoted and last-assignment-wins values, as the backend writes them.
+    const custom = path.join(root, 'My Videos', 'Clips')
+    fs.writeFileSync(configFile, `DEVICE_DOWNLOADS_DIR='${path.join(root, 'old')}'\nDEVICE_DOWNLOADS_DIR='${custom}'\n`)
+    assert.equal(readConfigValue(configFile, 'DEVICE_DOWNLOADS_DIR'), custom)
+    assert.equal(prepareDownloadFolder(configFile, downloads).folder, custom)
+    assert.equal(fs.statSync(custom).isDirectory(), true)
+
+    fs.writeFileSync(configFile, 'DEVICE_DOWNLOADS_DIR="relative/folder" # comment\n')
+    assert.equal(resolveDownloadFolder(configFile, downloads).isDefault, true)
+
+    // A folder that cannot be created falls back to the default instead of failing the save.
+    const blocker = path.join(root, 'blocker')
+    fs.writeFileSync(blocker, 'a file, not a folder')
+    fs.writeFileSync(configFile, `DEVICE_DOWNLOADS_DIR='${path.join(blocker, 'inside')}'\n`)
+    const fallback = prepareDownloadFolder(configFile, downloads, () => {})
+    assert.equal(fallback.folder, path.join(downloads, 'MusicBox'))
+
+    assert.equal(deviceDownloadId('musicbox://app/api/downloads/device/abc123/file'), 'abc123')
+    assert.equal(deviceDownloadId('musicbox://app/api/downloads/direct?media_kind=video'), null)
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})

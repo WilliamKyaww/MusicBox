@@ -219,6 +219,8 @@ export type DownloadOptions = {
   videoQuality: VideoQuality
   destination: DownloadDestination
   section: DownloadSection
+  /** Device downloads only: the title is the finished file name, with no section suffix added. */
+  exactFilename?: boolean
 }
 
 export type DownloadJob = {

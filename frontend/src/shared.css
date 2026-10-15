@@ -937,27 +937,255 @@
   margin: 0;
   font-size: 1.125rem;
 }
-.device-downloads {
+/* ---------- Download notifications ---------- */
+
+.download-toasts {
   position: fixed;
   inset-inline-end: 16px;
   bottom: 104px;
   z-index: 100;
-  width: min(380px, calc(100vw - 32px));
-  max-height: 50vh;
-  overflow-y: auto;
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  pointer-events: none;
 }
 
-.device-download {
-  padding: 16px;
+.download-toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 14px 14px 14px;
   border: 1px solid var(--surface-border);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--surface);
   color: var(--text-strong);
-  overflow-wrap: anywhere;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  pointer-events: auto;
+  animation: download-toast-in 200ms ease;
 }
 
-.device-download p { margin: 8px 0; font-size: 0.875rem; }
-.device-download progress { width: 100%; accent-color: var(--accent); }
-.device-download__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.download-toast__badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.download-toast--ready .download-toast__badge {
+  background: var(--success-bg);
+  color: var(--success-color);
+}
+
+.download-toast--failed .download-toast__badge {
+  background: rgba(220, 53, 69, 0.14);
+  color: var(--danger-color);
+}
+
+.download-toast--cancelled .download-toast__badge {
+  background: var(--yt-chip, rgba(128, 128, 128, 0.16));
+  color: var(--text-muted);
+}
+
+.download-toast__icon {
+  width: 20px;
+  height: 20px;
+}
+
+.download-toast__body {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+  padding-inline-end: 4px;
+}
+
+.download-toast__title {
+  overflow: hidden;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-toast__status {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.download-toast--failed .download-toast__status {
+  color: var(--text-strong);
+}
+
+.download-toast__bar {
+  position: relative;
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface-border);
+}
+
+.download-toast__bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 400ms ease;
+}
+
+.download-toast__bar--indeterminate span {
+  width: 40%;
+  animation: download-toast-slide 1.2s ease-in-out infinite;
+}
+
+.download-toast__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.download-toast__actions:empty {
+  display: none;
+}
+
+.download-toast__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--surface-border);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.download-toast__action:hover:not(:disabled) {
+  background: var(--yt-chip, rgba(128, 128, 128, 0.16));
+}
+
+.download-toast__action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.download-toast__action--primary {
+  border-color: transparent;
+  background: var(--yt-chip-active);
+  color: var(--yt-chip-active-text);
+}
+
+.download-toast__action--primary:hover:not(:disabled) {
+  background: var(--yt-chip-active);
+  opacity: 0.85;
+}
+
+.download-toast__action-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.download-toast__close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px 0 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.download-toast__close:hover {
+  background: var(--yt-chip, rgba(128, 128, 128, 0.16));
+  color: var(--text-strong);
+}
+
+.download-toast__close-icon {
+  width: 16px;
+  height: 16px;
+}
+
+@keyframes download-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes download-toast-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .download-toast,
+  .download-toast__bar--indeterminate span {
+    animation: none;
+  }
+}
+
+/* ---------- Settings: download folder ---------- */
+
+.settings-page .settings-folder {
+  display: grid;
+  gap: 12px;
+  width: min(460px, 100%);
+}
+
+.settings-page .settings-folder__path {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text-strong);
+  font-size: 0.875rem;
+}
+
+.settings-page .settings-folder__path > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-page .settings-folder__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}

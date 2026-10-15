@@ -139,6 +139,19 @@ SPECS: tuple[SettingSpec, ...] = (
         pattern_message="A Discord application ID contains only digits.",
     ),
     SettingSpec(
+        key="DEVICE_DOWNLOADS_DIR",
+        label="Download Folder",
+        group="downloads",
+        kind="text",
+        description=(
+            "Where videos and clips downloaded to this device are saved. Leave empty to use "
+            "the MusicBox folder inside your Downloads folder."
+        ),
+        max_length=1024,
+        pattern=r"^(?:[A-Za-z]:[\\/]|\\\\|/).+",
+        pattern_message=r"Use a full folder path, for example C:\Users\you\Videos\MusicBox.",
+    ),
+    SettingSpec(
         key="MAX_CONCURRENT_DOWNLOADS",
         label="Simultaneous Downloads",
         group="downloads",

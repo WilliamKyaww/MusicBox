@@ -29,6 +29,7 @@ export function prepareDeviceDownload(video: VideoSearchResult, options: Downloa
     body: JSON.stringify({ video_id: video.id, title: video.title,
       channel_title: video.channel_title, source_url: video.video_url,
       media_kind: options.mediaKind, video_quality: options.videoQuality,
+      exact_filename: options.exactFilename ?? false,
       section: { start_seconds: options.section.startSeconds, end_seconds: options.section.endSeconds } }),
   })
 }
@@ -127,6 +128,10 @@ export function getDirectDownloadHref(
     video_quality: options.videoQuality,
     start_seconds: String(options.section.startSeconds),
   })
+
+  if (options.exactFilename) {
+    params.set('exact_filename', 'true')
+  }
 
   if (options.section.endSeconds !== null) {
     params.set('end_seconds', String(options.section.endSeconds))

@@ -34,6 +34,9 @@ class DownloadRequest(BaseModel):
     media_kind: MediaKind = "audio"
     video_quality: VideoQuality = "best"
     section: DownloadSection | None = None
+    # Device downloads only: use the title as the whole file name instead of
+    # adding the section suffix, because the user chose the name themselves.
+    exact_filename: bool = False
 
 
 class UpdateDownloadRequest(BaseModel):

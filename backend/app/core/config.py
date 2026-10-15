@@ -43,6 +43,10 @@ class Settings(BaseSettings):
         default=BACKEND_DIR / "data" / "downloads",
         alias="DOWNLOADS_DIR",
     )
+    # Where "Download to this device" saves files in the desktop app. Empty means
+    # the MusicBox folder inside the user's Downloads folder. The desktop launcher
+    # reads this itself, so the backend only stores and validates it.
+    device_downloads_dir: str = Field(default="", alias="DEVICE_DOWNLOADS_DIR")
     playlists_dir: Path = Field(
         default=BACKEND_DIR / "data" / "playlists",
         alias="PLAYLISTS_DIR",

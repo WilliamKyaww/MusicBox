@@ -1,9 +1,11 @@
-const { app, BrowserWindow, Menu, dialog, session, shell, protocol } = require('electron')
+const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell, protocol } = require('electron')
 const { randomBytes } = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { startBackend } = require('./backend.cjs')
-const { isDeviceVideo, reserveDownload } = require('./downloads.cjs')
+const {
+  deviceDownloadId, isDeviceVideo, prepareDownloadFolder, reserveDownload, resolveDownloadFolder,
+} = require('./downloads.cjs')
 const { APP_ID, desktopRequestHeaders, proxyDesktopRequest } = require('./network.cjs')
 
 app.setName('MusicBox')
@@ -46,6 +48,43 @@ function isInternalUrl(url) {
   return parsed.protocol === 'musicbox:' && parsed.host === 'app'
 }
 
+// Files MusicBox reported as saved; only these may be revealed in the file manager.
+const savedFiles = new Set()
+
+/** The folder device downloads go to, created on demand (Downloads\MusicBox unless changed in Settings). */
+function downloadFolder() {
+  return prepareDownloadFolder(configFile, app.getPath('downloads'), (message) => log(`${message}\n`))
+}
+
+function registerDesktopBridge() {
+  const fromApp = (event) => {
+    try { return isInternalUrl(event.senderFrame?.url ?? '') } catch { return false }
+  }
+  const describeFolder = () => {
+    const { folder, defaultFolder, isDefault } = downloadFolder()
+    return { folder, defaultFolder, isDefault }
+  }
+  ipcMain.handle('musicbox:get-download-folder', (event) => (fromApp(event) ? describeFolder() : null))
+  ipcMain.handle('musicbox:choose-download-folder', async (event) => {
+    if (!fromApp(event) || !mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose a download folder',
+      defaultPath: downloadFolder().folder,
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    return result.canceled || !result.filePaths[0] ? null : result.filePaths[0]
+  })
+  ipcMain.handle('musicbox:open-download-folder', async (event) => {
+    if (!fromApp(event)) return false
+    return (await shell.openPath(downloadFolder().folder)) === ''
+  })
+  ipcMain.handle('musicbox:show-in-folder', (event, filePath) => {
+    if (!fromApp(event) || !savedFiles.has(filePath) || !fs.existsSync(filePath)) return false
+    shell.showItemInFolder(filePath)
+    return true
+  })
+}
+
 async function launch() {
   const repoRoot = process.env.MUSICBOX_REPO_ROOT || path.resolve(__dirname, '..')
   const userDir = app.getPath('userData')
@@ -63,6 +102,9 @@ async function launch() {
   if (fs.existsSync(logFile) && fs.statSync(logFile).size > 5 * 1024 * 1024) {
     fs.renameSync(logFile, path.join(logDir, `backend-${Date.now()}.log`))
   }
+  // Create the download folder up front so it is already there the first time anything is saved.
+  downloadFolder()
+  registerDesktopBridge()
   const token = randomBytes(32).toString('hex')
   backend = await startBackend({
     packaged: app.isPackaged, resourcesPath: process.resourcesPath, repoRoot, configFile, dataDir, token,
@@ -92,21 +134,32 @@ async function launch() {
   ownSession.setPermissionCheckHandler((contents, permission) => Boolean(contents && isInternalUrl(contents.getURL()) && ['fullscreen', 'clipboard-sanitized-write'].includes(permission)))
   ownSession.on('will-download', (_event, item) => {
     let savePath
+    const folder = downloadFolder().folder
+    const deviceId = isInternalUrl(item.getURL()) ? deviceDownloadId(item.getURL()) : null
     try {
       if (isDeviceVideo(item)) {
-        savePath = reserveDownload(app.getPath('downloads'), item.getFilename())
+        savePath = reserveDownload(folder, item.getFilename())
         item.setSavePath(savePath)
       } else {
-        item.setSaveDialogOptions({ title: 'Save from MusicBox', defaultPath: path.join(app.getPath('downloads'), path.basename(item.getFilename())) })
+        item.setSaveDialogOptions({ title: 'Save from MusicBox', defaultPath: path.join(folder, path.basename(item.getFilename())) })
       }
     } catch (error) {
       log(`Download save failed: ${error.message}\n`)
       item.cancel()
-      void dialog.showMessageBox({ type: 'error', message: 'The file could not be saved to Downloads.', detail: 'Check that the folder is writable and try again.' })
+      void dialog.showMessageBox({ type: 'error', message: 'The file could not be saved.', detail: `Check that ${folder} exists and is writable, or choose another download folder in Settings.` })
     }
     item.once('done', (_event, state) => {
       if (savePath && state !== 'completed') {
         try { if (fs.statSync(savePath).size === 0) fs.unlinkSync(savePath) } catch { /* The download may already have removed its placeholder. */ }
+      }
+      if (state === 'completed') {
+        const savedPath = savePath || item.getSavePath()
+        if (savedPath) {
+          savedFiles.add(savedPath)
+          mainWindow?.webContents.send('musicbox:download-saved', {
+            id: deviceId, name: path.basename(savedPath), folder: path.dirname(savedPath), path: savedPath,
+          })
+        }
       }
       if (state === 'interrupted' && !quitting) void dialog.showMessageBox({ type: 'error', message: 'The file could not be saved. Please try again.' })
     })
@@ -115,6 +168,7 @@ async function launch() {
     title: 'MusicBox', width: 1320, height: 900, minWidth: 480, minHeight: 600,
     backgroundColor: '#111318', icon: path.join(__dirname, 'assets/icon.png'), show: false,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
       session: ownSession, contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true,
       // The split audio/video player synchronises on a timer, even when minimised.
       backgroundThrottling: false,
@@ -171,7 +225,9 @@ async function launch() {
       fs.writeFileSync(process.env.MUSICBOX_SMOKE_SCREENSHOT, (await mainWindow.webContents.capturePage()).toPNG())
     }
     if (downloadSmoke) {
-      const existing = path.join(app.getPath('downloads'), 'MusicBox test clip.mp4')
+      const smokeFolder = path.join(app.getPath('downloads'), 'MusicBox')
+      fs.mkdirSync(smokeFolder, { recursive: true })
+      const existing = path.join(smokeFolder, 'MusicBox test clip.mp4')
       fs.writeFileSync(existing, 'Existing file')
       await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Device download did not finish.')), 15000)
@@ -179,7 +235,7 @@ async function launch() {
           item.once('done', (_event, state) => {
             clearTimeout(timer)
             try {
-              if (state !== 'completed' || fs.readFileSync(existing, 'utf8') !== 'Existing file' || item.getSavePath() !== path.join(app.getPath('downloads'), 'MusicBox test clip (1).mp4') || fs.readFileSync(item.getSavePath(), 'utf8') !== 'MusicBox download fixture') throw new Error('Automatic download or collision protection failed.')
+              if (state !== 'completed' || fs.readFileSync(existing, 'utf8') !== 'Existing file' || item.getSavePath() !== path.join(smokeFolder, 'MusicBox test clip (1).mp4') || fs.readFileSync(item.getSavePath(), 'utf8') !== 'MusicBox download fixture') throw new Error('Automatic download or collision protection failed.')
               resolve()
             } catch (error) { reject(error) }
           })

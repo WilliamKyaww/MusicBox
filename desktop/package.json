@@ -30,6 +30,7 @@
       "backend.cjs",
       "network.cjs",
       "downloads.cjs",
+      "preload.cjs",
       "playback-check.cjs",
       "experience-check.cjs",
       "movies-check.cjs",

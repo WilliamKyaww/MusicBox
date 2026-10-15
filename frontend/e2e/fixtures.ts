@@ -120,6 +120,7 @@ function settingsResponse(values: Record<string, string | boolean | number>) {
     fields: [
       field('YOUTUBE_API_KEY', 'YouTube Data API Key', 'youtube', 'secret'),
       field('DISCORD_PRESENCE_ENABLED', 'Discord Status', 'discord', 'boolean'),
+      field('DEVICE_DOWNLOADS_DIR', 'Download Folder', 'downloads', 'text'),
       field('MAX_CONCURRENT_DOWNLOADS', 'Simultaneous Downloads', 'downloads', 'integer', {
         restart_required: true,
         minimum: 1,
@@ -173,7 +174,7 @@ export async function mockLibrary(page: Page) {
     presenceActive: false,
     completedPresence: [] as string[],
     // Settings page: what the mocked backend has stored, and every write it received.
-    settings: { YOUTUBE_API_KEY: '', DISCORD_PRESENCE_ENABLED: false, MAX_CONCURRENT_DOWNLOADS: 2 } as Record<
+    settings: { YOUTUBE_API_KEY: '', DISCORD_PRESENCE_ENABLED: false, DEVICE_DOWNLOADS_DIR: '', MAX_CONCURRENT_DOWNLOADS: 2 } as Record<
       string,
       string | boolean | number
     >,
