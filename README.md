@@ -167,7 +167,7 @@ Every video card has a ⋮ menu to listen to audio only, download, save to a pla
 
 Video cards, search and Up Next rows, and the watch-page description show both the relative upload time and the full date, for example `2 weeks ago · 13th September 2026`. Dates use the UK calendar and wrap on narrow screens instead of being cut off.
 
-Expanding a video's description shows a **Transcript** section with a **Show transcript** button (when the video has captions). It opens a panel above Up Next, or below the video on narrow screens, with timed lines that follow playback, click-to-seek, a language picker and a timestamps toggle.
+Expanding a video's description shows a **Transcript** section with a **Show transcript** button (when the video has captions). It opens a panel above Up Next, or below the video on narrow screens, with timed lines that follow playback, click-to-seek, a language picker, a timestamps toggle and a search box. Searching (or pressing Ctrl+F while the transcript is open) highlights every match, shows "2 of 8", and steps through results with Enter, Shift+Enter or the arrow buttons; click a line to jump the video to it.
 
 The download dialog has a **File name** field. Clips are suggested as `Title (1m00s-1m30s)`; whatever you type is the name the file is saved under. Downloads to this device show a notification card with progress, a Cancel button, and, in the desktop app, where the file was saved with a **Show in folder** button. The desktop app saves device downloads to a `MusicBox` folder inside your Downloads folder (created for you); change it under **Settings → Downloads**. The web app can't choose a folder, because the browser decides where downloads go.
 

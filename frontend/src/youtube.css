@@ -3611,3 +3611,115 @@ like YouTube's playlist thumbnails. */
   padding: 12px 24px;
   background: var(--bg);
 }
+
+/* ---------- Transcript search ---------- */
+
+.transcript__search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.transcript__search-field {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 18px;
+  background: var(--input-bg, transparent);
+  color: var(--text-muted);
+}
+
+.transcript__search-field:focus-within {
+  border-color: var(--accent);
+}
+
+.transcript__search-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.transcript__search-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.transcript__search-field input:disabled {
+  cursor: default;
+}
+
+.transcript__search-clear {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.transcript__search-clear:hover {
+  background: var(--yt-chip);
+  color: var(--text-strong);
+}
+
+.transcript__search-clear-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.transcript__count {
+  flex: none;
+  min-width: 52px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.transcript__count--empty {
+  color: var(--danger-color);
+}
+
+.transcript__step {
+  flex: none;
+}
+
+.transcript__step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.transcript__line mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: rgba(255, 214, 0, 0.35);
+  color: inherit;
+}
+
+.transcript__line--current-match {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.transcript__line--current-match mark {
+  background: rgba(255, 170, 0, 0.7);
+  color: #0f0f0f;
+}

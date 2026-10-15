@@ -47,3 +47,34 @@ export function activeLineIndex(lines: TranscriptLine[], time: number) {
 
   return found
 }
+
+function searchPattern(query: string) {
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(${escaped})`, 'gi')
+}
+
+/** Indices of the lines that contain `query`, ignoring case. An empty query matches nothing. */
+export function findMatches(lines: TranscriptLine[], query: string) {
+  const needle = query.trim()
+  if (!needle) return []
+  const pattern = searchPattern(needle)
+  const found: number[] = []
+  lines.forEach((line, index) => {
+    pattern.lastIndex = 0
+    if (pattern.test(line.text)) found.push(index)
+  })
+  return found
+}
+
+export type TextPart = { text: string; match: boolean }
+
+/** Splits a line so the parts that match `query` can be highlighted. */
+export function splitMatches(text: string, query: string): TextPart[] {
+  const needle = query.trim()
+  if (!needle) return [{ text, match: false }]
+  // With one capture group, split() puts the matches at the odd positions.
+  return text
+    .split(searchPattern(needle))
+    .map((part, index) => ({ text: part, match: index % 2 === 1 }))
+    .filter((part) => part.text !== '')
+}
