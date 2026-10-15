@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatClock, formatDate, formatFullViews, formatRelativeTime, formatViews } from '../format'
+import { formatClock, formatFullViews, formatPublicationDate, formatRelativeTime, formatViews } from '../format'
 import { paths } from '../router'
 import { RichText } from './RichText'
 import type { VideoDetails } from '../types'
@@ -19,9 +19,9 @@ export function DescriptionBox({ details, onSeek }: DescriptionBoxProps) {
     ? [
         formatFullViews(details.view_count),
         isLive ? 'Started streaming' : null,
-        formatDate(details.published_at),
+        formatPublicationDate(details.published_at),
       ]
-    : [formatViews(details.view_count, isLive), formatRelativeTime(details.published_at)]
+    : [formatViews(details.view_count, isLive), formatRelativeTime(details.published_at), formatPublicationDate(details.published_at)]
 
   return (
     <section

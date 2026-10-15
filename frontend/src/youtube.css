@@ -791,6 +791,12 @@ kbd {
   white-space: nowrap;
 }
 
+.yt-card__meta {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 a.yt-card__channel:hover {
   color: var(--text-strong);
 }

@@ -8,6 +8,12 @@ const compactFormatter = new Intl.NumberFormat(LOCALE, {
   maximumFractionDigits: 1,
 })
 const fullFormatter = new Intl.NumberFormat(LOCALE)
+const publicationDateFormatter = new Intl.DateTimeFormat(LOCALE, {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'Europe/London',
+})
 
 export function formatCompact(value: number) {
   return compactFormatter.format(value)
@@ -65,6 +71,24 @@ export function formatDate(isoDate: string | null | undefined) {
   })
 }
 
+export function formatPublicationDate(isoDate: string | null | undefined) {
+  if (!isoDate) return null
+  const timestamp = Date.parse(isoDate)
+  if (Number.isNaN(timestamp)) return null
+
+  const parts = publicationDateFormatter.formatToParts(timestamp)
+  const day = parts.find((part) => part.type === 'day')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const year = parts.find((part) => part.type === 'year')?.value
+  if (!day || !month || !year) return null
+
+  const date = Number(day)
+  const suffix = date % 100 >= 11 && date % 100 <= 13
+    ? 'th'
+    : date % 10 === 1 ? 'st' : date % 10 === 2 ? 'nd' : date % 10 === 3 ? 'rd' : 'th'
+  return `${day}${suffix} ${month} ${year}`
+}
+
 /** `75` -> `1:15`, `3725` -> `1:02:05`. */
 export function formatClock(totalSeconds: number) {
   const safe = Math.max(0, Math.floor(totalSeconds))
@@ -86,7 +110,8 @@ export function formatPreciseClock(totalSeconds: number) {
 
 /** Joins the non-empty parts of a metadata line with YouTube's middle dot. */
 export function joinMeta(...parts: (string | null | undefined | false)[]) {
-  return parts.filter(Boolean).join(' • ')
+  // Non-breaking spaces keep the bullet attached to its neighbours with room to breathe.
+  return parts.filter(Boolean).join('  •  ')
 }
 
 /** `1536` -> `1.5 KB`; null when the size is unknown. */

@@ -1,4 +1,4 @@
-import { formatRelativeTime, formatViews, joinMeta } from '../format'
+import { formatPublicationDate, formatRelativeTime, formatViews, joinMeta } from '../format'
 import { paths } from '../router'
 import { ChannelAvatar } from './ChannelAvatar'
 import { VideoActionsMenu } from './VideoActionsMenu'
@@ -36,6 +36,7 @@ export function VideoListItem({
   const meta = joinMeta(
     formatViews(video.view_count, isLive),
     video.live_status === 'is_upcoming' ? 'Upcoming' : formatRelativeTime(video.published_at),
+    formatPublicationDate(video.published_at),
   )
 
   const channel = channelLink ? (

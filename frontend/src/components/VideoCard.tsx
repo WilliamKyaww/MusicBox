@@ -1,4 +1,4 @@
-import { formatRelativeTime, formatViews, joinMeta } from '../format'
+import { formatPublicationDate, formatRelativeTime, formatViews, joinMeta } from '../format'
 import { paths } from '../router'
 import { ChannelAvatar } from './ChannelAvatar'
 import { VideoActionsMenu } from './VideoActionsMenu'
@@ -20,6 +20,7 @@ export function VideoCard({ video, onOpen, showChannel = true, listId = null }: 
   const meta = joinMeta(
     formatViews(video.view_count, isLive),
     video.live_status === 'is_upcoming' ? 'Upcoming' : formatRelativeTime(video.published_at),
+    formatPublicationDate(video.published_at),
   )
 
   return (

@@ -1,7 +1,7 @@
 {
   "name": "musicbox-desktop",
   "productName": "MusicBox",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": true,
   "description": "MusicBox desktop music and video player",
   "author": "WilliamKyaww",
