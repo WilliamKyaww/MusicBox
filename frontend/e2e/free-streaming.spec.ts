@@ -10,8 +10,8 @@ const variants = [720, 480].map(height => ({ id: `blender:${height}`, label: `${
   height, duration: 30, video_codec: 'MP4', audio_codec: 'provider', source_type: 'remote', intro_start: 0, intro_end: 0 }))
 const film = { id, kind: 'movie', title: 'Big Buck Bunny', description: 'Creator-authorised open film.', date: '2008', runtime: 10,
   poster: '/test-art/track000000.svg', backdrop: '/test-art/banner3.svg', genres: ['Animation', 'Comedy'], rating: 0,
-  cast: [], crew: ['Blender Foundation'], seasons: [], trailer_url: null, provider_url: null, certification: 'Not rated',
-  available_providers: ['Blender Open Movies'], playable: true, assets: variants,
+  cast: [], crew: ['Sacha Goedegebure'], seasons: [], trailer_url: null, provider_url: null, certification: 'Not rated',
+  available_providers: ['Blender Open Movies'], playable: true, watchable: true, assets: variants,
   online_source: { provider: 'Blender Open Movies', page_url: `${origin}/w/${filmId}`, licence: 'CC BY 3.0', licence_url: 'https://peach.blender.org/about/', attribution: '(c) 2008 Blender Foundation', verified_on: '2026-10-06' } }
 
 async function fixture(page: Page) {
@@ -34,7 +34,7 @@ async function fixture(page: Page) {
       metadata_configured: false, media_configured: false, free_streaming_enabled: true, local_access: true, schema_version: 3 })
     if (path === '/profiles') return send([{ id: 'default', name: 'Local profile', local_default: 1 }])
     if (path === '/genres') return send([{ id: 16, name: 'Animation' }])
-    if (path === '/catalogue') return send({ items: url.searchParams.get('source') === 'local' ? [] : [film], page: 1, total_pages: 1, source: 'free' })
+    if (path === '/library') return send({ items: [film], total: 1 })
     if (path.endsWith('/recommendations')) return send([])
     if (path === '/titles/' + id) return send(film)
     if (path.endsWith('/titles/' + id)) return send({ saved, progress: position ? { position, duration: 30, completed: false } : null })
@@ -62,8 +62,8 @@ test('free online film plays without a key or folder, switches quality and resum
   const data = await fixture(page)
   await page.goto('/#/movies/home')
   await expect(page.getByRole('heading', { name: 'Free to Watch Online' })).toBeVisible()
-  await expect(page.getByText('Free stream', { exact: true }).first()).toBeVisible()
-  await page.locator('.movies-feature').getByRole('link', { name: 'Play now' }).click()
+  await expect(page.locator('.movie-card__badge--free').first()).toHaveText('Free')
+  await page.locator('.movies-hero').getByRole('link', { name: 'Play', exact: true }).click()
   const video = page.locator('.movies-player-frame video')
   await expect(video).toHaveAttribute('src', /^https:\/\/video\.blender\.org\//)
   await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(.2)
@@ -90,6 +90,7 @@ test('provider outage is explicit, retry recovers, and Video still works', async
   data.offline(true)
   await page.goto('/#/movies/watch?id=' + encodeURIComponent(id))
   await expect(page.getByRole('alert')).toContainText('creator-hosted stream is unavailable')
+  await expect(page.getByRole('heading', { name: 'Stream Unavailable' })).toBeVisible()
   data.offline(false)
   await page.getByRole('button', { name: 'Try again', exact: true }).click()
   await expect.poll(() => page.locator('.movies-player-frame video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(.2)

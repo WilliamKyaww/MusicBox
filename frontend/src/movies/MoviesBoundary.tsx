@@ -1,10 +1,16 @@
 import { Component, type ReactNode } from 'react'
 import { experiencePath } from '../experience'
 
-/** A failed optional workspace must not unmount the shared audio player. */
-export class MoviesBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+/**
+ * A failed optional workspace must not unmount the shared audio player. Navigating
+ * (a new `resetKey`) clears the failure without remounting the workspace.
+ */
+export class MoviesBoundary extends Component<{ children: ReactNode; resetKey: string }, { failed: boolean }> {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
+  componentDidUpdate(previous: { resetKey: string }) {
+    if (this.state.failed && previous.resetKey !== this.props.resetKey) this.setState({ failed: false })
+  }
   render() {
     if (!this.state.failed) return this.props.children
     return <section className="status-panel status-panel--error" role="alert">

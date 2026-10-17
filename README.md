@@ -6,7 +6,7 @@ Warning: vibe coded
 
 ## Video and Music Experiences
 
-Use the **Video / Music** switch in the top bar on desktop or web. The switch and the Settings button next to it look and behave the same in both experiences. The app remembers your last music page and the last non-playing video page. Audio continues when switching views; deliberately opening a video stops the audio player to prevent overlapping playback.
+Use the **Video / Music / Movies** switch in the top bar on desktop or web (Movies appears once you enable it). The switch and the Settings button next to it look and behave the same in every experience: all three top bars share one height, one right-hand inset and one set of control sizes, so the switch never moves or resizes when you change page or experience. The app remembers your last music page and the last non-playing video page. Audio continues when switching views; deliberately opening a video stops the audio player to prevent overlapping playback.
 
 - **Video** keeps the YouTube-style browsing, channels, subscriptions, watch history, HD player, captions, comments, chapters, clips, and download tools from `main`.
 - **Music** works like Spotify's desktop and phone apps: Your Library, Home with Daily Mixes and On Repeat, search, artist and album pages, Liked Songs, playlists, a Now Playing view, synced lyrics, a full-screen player and a Spotify-style queue.
@@ -21,7 +21,11 @@ This is not full Spotify feature parity. Spotify Connect, Jam, Blend, AI DJ, lic
 
 ## Movies and TV
 
-Enable **Settings > Connections > Movies experience** for the independent, Netflix-inspired Movies workspace. It includes a featured hero, catalogue rows, movie/TV search and suggestions, type/genre filters, details, credits, trailers, seasons/episodes, My List, local profiles, Watch History, Continue Watching and recommendations. Browsing Movies keeps existing music playing; starting a film pauses it without clearing the queue.
+Enable **Settings > Connections > Movies experience** for the independent, Netflix-inspired Movies workspace. It is always dark, like Music. It has a featured banner, rows for Continue Watching, My List, free films, your collection and each genre, instant search, filters by type, source and genre, a details page with cast, director, genres, release date, runtime, maturity rating and TMDB rating, seasons and episodes, local profiles, Watch History and recommendations. Browsing Movies keeps existing music playing; starting a film pauses it without clearing the queue.
+
+**Only titles that can be played are listed.** Rows, search, My List, Watch History and recommendations skip metadata-only titles, so nothing you can see is a dead end. If playback is not set up (free online films are off and no media folder is chosen), Movies says so, shows which of the two is missing and links to Settings instead of an empty catalogue. If a stream or file fails at play time, the player says why: no playable file, stream unavailable (with **Try again**) or playback blocked.
+
+Titles shown with missing information leave those details out rather than printing placeholders. Runtimes read as `1h 36m`, dates as `12 March 2024`, and the four free films carry their verified directors and voice casts.
 
 ### Set Up Content
 
@@ -30,7 +34,7 @@ Enable **Settings > Connections > Movies experience** for the independent, Netfl
 The same interface also supports these sources:
 
 1. In Connections, set **Movies media folder** to a folder on the computer running MusicBox containing files you are authorised to play. Nothing is scanned, uploaded or copied automatically.
-2. Open **Movies > My files** and register a relative path such as `Films/My film.mp4`, with a title and rights confirmation. For TV, optionally supply a show title, season and episode number. MP4 with H.264/AAC or WebM is recommended; FFprobe verifies the file before registration. Unregistering a file does not delete the original.
+2. Open **My files** (in the profile menu, or under **Browse** in narrow windows) and register a relative path such as `Films/My film.mp4`, with a title and rights confirmation. For TV, optionally supply a show title, season and episode number. MP4 with H.264/AAC or WebM is recommended; FFprobe verifies the file before registration. Unregistering a file does not delete the original.
 3. Optionally add your own **TMDB read access token** in Connections after reviewing TMDB's terms. This enables wider discovery and regional availability links. Without a token, search covers the free collection and your local titles. TMDB does not supply commercial-film streams or streaming rights.
 4. To attach a file to a catalogue title, open its details and choose **Register a local file**. For a TV show, open the specific episode first. Cards distinguish **Free stream**, **Ready to play** and **Details only**; cataloguing a title does not make it playable.
 
@@ -42,7 +46,7 @@ Configuration: `MOVIES_ENABLED` defaults to `false`; `MOVIES_FREE_STREAMING_ENAB
 
 Movies checks: from `backend`, run `.venv\Scripts\python.exe -m unittest discover -s tests`. Frontend unit/browser and desktop suites include Movies. For packaged/installed validation, set `MUSICBOX_SMOKE_MOVIES=1` and optionally `MUSICBOX_SMOKE_MOVIE_FILE` to the absolute path of `frontend/e2e/fixtures/movie.webm`, then launch `MusicBox.exe --smoke-test`. Set `MUSICBOX_SMOKE_FREE_STREAM=1` to additionally test real creator-hosted playback, decoded frames, forward/backward seeking and saved progress. Tests use disposable configuration/data; the online check uses internet bandwidth.
 
-Free-stream metadata is resolved only at playback time, with a five-minute in-memory cache, a fixed provider origin, verified publisher/UUID checks and exact media-path validation. There is no general URL proxy. Four unmodified creator thumbnails are bundled for reliable browsing; see [artwork attribution](frontend/public/movies/ATTRIBUTION.md). Provider failures are explicit and never trigger a switch to unverified services.
+Free-stream metadata is resolved only at playback time, with a five-minute in-memory cache, a fixed provider origin, verified publisher/UUID checks and exact media-path validation. There is no general URL proxy. Four unmodified creator thumbnails are bundled for reliable browsing (Sintel's has black bars baked in, which the app hides when displaying it, without changing the file); see [artwork attribution](frontend/public/movies/ATTRIBUTION.md). Provider failures are explicit and never trigger a switch to unverified services.
 
 Metadata uses TMDB's server-side bearer-token API, with a bounded ten-minute in-memory cache. The attribution logo in `frontend/public/tmdb-logo.svg` is the unmodified logo used by [TMDB's official documentation](https://developer.themoviedb.org/docs/faq), retrieved from `https://files.readme.io/29c6fee-blue_short.svg` on 5 October 2026. The 30-second silent test video is generated from a solid colour using FFmpeg, not movie footage.
 
@@ -58,7 +62,7 @@ Open **Settings** with the gear button at the right of the top bar, or from the 
 
 - **Connections**: the YouTube Data API key, search cache duration, YouTube cookies file, Spotify Client ID and Client Secret for playlist import, Discord status, and the number of simultaneous downloads. Changes apply straight away, except Simultaneous Downloads, which takes effect after MusicBox restarts.
 - **Playback**: Autoplay and the sleep timer.
-- **Appearance**: light or dark theme for the Video experience; until you choose, it follows your system. Music always uses its dark theme.
+- **Appearance**: light or dark theme for the Video experience; until you choose, it follows your system. Music and Movies always use their dark theme.
 - **Privacy and Data**, **Keyboard Shortcuts** and **About**.
 
 To add your YouTube key, choose **Add key**, paste it and choose **Save**. **Check key** tests it with YouTube first. Keys are write-only: once saved, they are never sent back to the page, which only shows whether one is set; use **Replace** or **Remove** to change it. Settings are saved on the computer running the backend, in `backend/.env` for the web app and when the desktop app runs from source, and in `%APPDATA%\MusicBox\config.env` for the installed desktop app. Both files are outside Git.

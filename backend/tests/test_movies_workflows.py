@@ -123,6 +123,26 @@ class MovieWorkflows(unittest.IsolatedAsyncioTestCase):
         response=await self.client.post(f"/api/movies/profiles/{self.profile}/playback/{episode['id']}",headers=GUARD)
         self.assertEqual(response.status_code,404)
 
+    async def test_library_lists_registered_titles_and_series_with_playable_episodes(self):
+        self.settings.movies_free_streaming_enabled=False
+        self.assertEqual((await self.client.get('/api/movies/library')).json()['items'],[])
+        film=await self.register()
+        self.assertTrue(film['watchable'])
+        # A metadata-only title is not playable, so it never appears.
+        from app.services.movies.repository import MoviesRepository
+        MoviesRepository(self.settings.movies_data_dir).save_title({**film,'id':'local:movie:no-file','title':'No File','assets':[]})
+        (self.media/'episode.mp4').write_bytes(bytes(range(256))*16)
+        episode=(await self.client.post('/api/movies/library',headers=GUARD,json={'title':'Pilot','relative_path':'episode.mp4','rights_confirmed':True,'show_title':'Local Series'})).json()
+        items=(await self.client.get('/api/movies/library')).json()['items']
+        self.assertEqual({i['title'] for i in items},{'Test Film','Local Series'})
+        series=next(i for i in items if i['kind']=='show')
+        self.assertFalse(series['playable'])
+        self.assertTrue(series['watchable'])
+        (self.media/'episode.mp4').unlink()
+        titles=[i['title'] for i in (await self.client.get('/api/movies/library')).json()['items']]
+        self.assertEqual(titles,['Test Film'])
+        self.assertEqual(episode['kind'],'episode')
+
     async def test_path_traversal_cannot_register_outside_root(self):
         (self.root/'outside.mp4').write_bytes(b'private')
         for value in ('../outside.mp4',str(self.root/'outside.mp4'),'https://example.com/film.mp4'):

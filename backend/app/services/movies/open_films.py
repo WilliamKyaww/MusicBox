@@ -2,6 +2,8 @@
 
 Licence pages and the Blender publisher were checked on 6-7 October 2026.
 Keep full films/credits intact. API licence labels alone are not clearance.
+Directors and voice casts were checked against the films' Wikipedia articles, the
+creators' press releases and the Blender project pages on 16 October 2026.
 """
 
 from copy import deepcopy
@@ -30,25 +32,35 @@ class OpenFilm:
     attribution: str
     description: str
     genres: tuple[str, ...]
+    directors: tuple[str, ...]
+    cast: tuple[str, ...] = ()
+    # Sintel's creator thumbnail has black bars baked in; this is the share of its height
+    # to ignore top and bottom when displaying it. The bundled file is not modified.
+    art_inset: str = ''
 
 
 FILMS = (
     OpenFilm('big-buck-bunny', 'Big Buck Bunny', 'bf1f3fb5-b119-4f9f-9930-8e20e892b898', '2008', 596,
              'CC BY 3.0', 'https://peach.blender.org/about/',
              '(c) 2008 Blender Foundation / www.bigbuckbunny.org',
-             'A peaceful rabbit meets three mischievous neighbours in this animated open short.', ('Animation', 'Comedy')),
+             'A peaceful rabbit meets three mischievous neighbours in this animated open short.', ('Animation', 'Comedy'),
+             ('Sacha Goedegebure',)),
     OpenFilm('sintel', 'Sintel', '0eb052d0-fd51-43e6-aa33-ecdbf77a5d40', '2010', 888,
              'CC BY 3.0', 'https://durian.blender.org/about/',
              '(c) 2010 Blender Foundation / durian.blender.org',
-             'A young traveller searches for a dragon in this animated fantasy short.', ('Animation', 'Fantasy')),
+             'A young traveller searches for a dragon in this animated fantasy short.', ('Animation', 'Fantasy'),
+             ('Colin Levy',), ('Halina Reijn', 'Thom Hoffman'), '21.7% 0'),
     OpenFilm('tears-of-steel', 'Tears of Steel', '8533ea43-4271-4a57-9694-e9d0b35e1aa1', '2012', 734,
              'CC BY 3.0', 'https://mango.blender.org/sharing/',
              '(c) Blender Foundation / mango.blender.org',
-             'Live action meets visual effects in a science-fiction story set in a future Amsterdam.', ('Science Fiction',)),
+             'Live action meets visual effects in a science-fiction story set in a future Amsterdam.', ('Science Fiction',),
+             ('Ian Hubert',), ('Derek de Lint', 'Sergio Hasselbaink', 'Vanja Rukavina', 'Denise Rebergen',
+                               'Rogier Schippers', 'Jody Bhe', 'Chris Haley')),
     OpenFilm('elephants-dream', 'Elephants Dream', 'cccc3e60-0291-4ecc-aa56-39b2e2c7d0d5', '2006', 654,
              'Creative Commons Attribution', 'https://orange.blender.org/blog/creative-commons-license-2/',
              '(c) 2006 Blender Foundation / Netherlands Media Art Institute / www.elephantsdream.org',
-             'Two characters explore a strange mechanical world in Blender Foundation\'s first open film.', ('Animation', 'Science Fiction')),
+             'Two characters explore a strange mechanical world in Blender Foundation\'s first open film.', ('Animation', 'Science Fiction'),
+             ('Bassam Kurdali',), ('Cas Jansen', 'Tygo Gernandt')),
 )
 BY_ID = {f'open:movie:{film.slug}': film for film in FILMS}
 GENRES = {16: 'Animation', 35: 'Comedy', 14: 'Fantasy', 878: 'Science Fiction'}
@@ -69,9 +81,10 @@ def details(title_id):
     return {
         'id': title_id, 'kind': 'movie', 'title': film.title, 'description': film.description,
         'date': film.year, 'runtime': round(film.seconds / 60), 'poster': image, 'backdrop': image,
-        'genres': list(film.genres), 'rating': 0, 'cast': [], 'crew': ['Blender Foundation'],
+        'genres': list(film.genres), 'rating': 0, 'cast': list(film.cast), 'crew': list(film.directors),
         'seasons': [], 'trailer_url': None, 'provider_url': None, 'certification': 'Not rated',
         'available_providers': ['Blender Open Movies'],
+        **({'art_inset': film.art_inset} if film.art_inset else {}),
         'online_source': {'provider': 'Blender Open Movies', 'page_url': f'{ORIGIN}/w/{film.video_id}',
                           'licence': film.licence, 'licence_url': film.licence_page,
                           'attribution': film.attribution, 'verified_on': '2026-10-07'},

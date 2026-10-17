@@ -103,6 +103,31 @@ class HybridMovieApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(saved.status_code, 200)
             self.assertEqual((await self.client.get(f'/api/movies/profiles/{profile}/watchlist')).json()[0]['id'], TITLE)
 
+    async def test_library_lists_only_playable_titles_with_checked_credits(self):
+        with patch('app.services.movies.open_films.variants', side_effect=AssertionError('No stream resolution while browsing')):
+            result = (await self.client.get('/api/movies/library')).json()
+        self.assertEqual(result['total'], 4)
+        self.assertEqual([i['title'] for i in result['items']],
+                         ['Big Buck Bunny', 'Elephants Dream', 'Sintel', 'Tears of Steel'])
+        self.assertTrue(all(i['playable'] and i['watchable'] for i in result['items']))
+        sintel = next(i for i in result['items'] if i['title'] == 'Sintel')
+        self.assertEqual((sintel['crew'], sintel['cast']), (['Colin Levy'], ['Halina Reijn', 'Thom Hoffman']))
+        self.assertEqual(sintel['online_source']['licence'], 'CC BY 3.0')
+        self.assertEqual(sintel['art_inset'], '21.7% 0')
+        self.assertNotIn('art_inset', next(i for i in result['items'] if i['title'] == 'Big Buck Bunny'))
+
+    async def test_library_is_empty_when_nothing_can_be_played(self):
+        self.settings.movies_free_streaming_enabled = False
+        self.assertEqual((await self.client.get('/api/movies/library')).json(), {'items': [], 'total': 0})
+
+    async def test_playable_recommendations_skip_titles_that_cannot_be_played(self):
+        response = await self.client.get(f'/api/movies/titles/{TITLE}/recommendations?playable=true')
+        items = response.json()
+        self.assertEqual(len(items), 3)
+        self.assertNotIn(TITLE, [i['id'] for i in items])
+        self.assertTrue(all(i['watchable'] for i in items))
+        self.assertEqual(items[0]['genres'][0], 'Animation')
+
     async def test_free_toggle_fails_closed_and_retains_saved_metadata(self):
         self.settings.movies_free_streaming_enabled = False
         self.assertEqual((await self.client.get('/api/movies/catalogue?source=free')).json()['items'], [])

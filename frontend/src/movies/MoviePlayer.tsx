@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { getApiHref } from '../api/client'
-import { type Movie, type MovieSession, errorText, idPath, movieApi } from './api'
+import { ArrowLeftIcon, FullscreenIcon, ReplayIcon } from '../components/Icons'
+import { type Movie, type MovieSession, errorStatus, errorText, idPath, movieApi } from './api'
 import { moviesPath } from './routes'
 import { MovieFailure, MovieLoading } from './ui'
+
+/** Says what went wrong in terms the viewer can act on, from the status the backend answered with. */
+function problemTitle(status: number, message: string) {
+  if (status === 404 && /playable file/i.test(message)) return 'Nothing to Play'
+  if (status === 503) return 'Stream Unavailable'
+  if (status === 403) return 'Playback Is Not Available'
+  return 'Playback Problem'
+}
 
 export function MoviePlayer({ id, profile, onPlay }: { id: string; profile: string; onPlay: () => void }) {
   const video = useRef<HTMLVideoElement>(null)
@@ -12,6 +21,7 @@ export function MoviePlayer({ id, profile, onPlay }: { id: string; profile: stri
   const position = useRef(0)
   const [session, setSession] = useState<MovieSession | null>(null)
   const [error, setError] = useState('')
+  const [errorStatusCode, setErrorStatusCode] = useState(0)
   const [saveError, setSaveError] = useState('')
   const [waiting, setWaiting] = useState(false)
   const [ended, setEnded] = useState(false)
@@ -36,7 +46,7 @@ export function MoviePlayer({ id, profile, onPlay }: { id: string; profile: stri
     let disposed = false
     movieApi.post<MovieSession>(`/profiles/${profile}/playback/${idPath(id)}${asset ? `?asset_id=${asset}` : ''}`)
       .then(data => { if (!disposed) { current.current = data; sequence.current = 0; setSession(data); setError('') } })
-      .catch(e => { if (!disposed) setError(errorText(e)) })
+      .catch(e => { if (!disposed) { setError(errorText(e)); setErrorStatusCode(errorStatus(e)) } })
     const save = () => { void checkpoint.current() }
     const timer = window.setInterval(save, 5000)
     window.addEventListener('pagehide', save)
@@ -69,9 +79,11 @@ export function MoviePlayer({ id, profile, onPlay }: { id: string; profile: stri
   }, [ended, autoplay, next])
   async function fullscreen() { try { if (document.fullscreenElement) await document.exitFullscreen(); else await frame.current?.requestFullscreen() } catch { setError('Fullscreen is unavailable in this window.') } }
   const activeAsset = session?.title.assets.find(a => a.id === session.asset_id)
-  return <div className="movies-player-page"><a className="movies-back" href={moviesPath('details', id)}>Back to title</a>
-    {!session && !error && <MovieLoading />}{error && <MovieFailure text={error} retry={() => { setError(''); setAttempt(a => a + 1) }} />}
-    {session && <><h2>{session.title.title}</h2><div className="movies-player-frame" ref={frame} tabIndex={0} aria-label="Movie player. Space to play or pause, arrows to seek, F for fullscreen." onKeyDown={e => {
+  const retryable = errorStatusCode !== 404 && errorStatusCode !== 403
+  return <div className="movies-player-page"><div className="movies-player-bar"><a className="movies-back" href={moviesPath('details', id)}><ArrowLeftIcon className="yt-icon" />Back to title</a>
+      {session && <h1>{session.title.title}</h1>}</div>
+    {!session && !error && <MovieLoading />}{error && <MovieFailure title={problemTitle(errorStatusCode, error)} text={error} retry={retryable ? () => { setError(''); setErrorStatusCode(0); setAttempt(a => a + 1) } : undefined} />}
+    {session && <><div className="movies-player-frame" ref={frame} tabIndex={0} aria-label="Movie player. Space to play or pause, arrows to seek, F for fullscreen." onKeyDown={e => {
       if (e.target !== frame.current && e.target !== video.current) return
       const element = video.current; if (!element) return
       if (e.key === ' ' || e.key.toLowerCase() === 'k') { e.preventDefault(); if (element.paused) void element.play().catch(() => {}); else element.pause() }
@@ -88,8 +100,8 @@ export function MoviePlayer({ id, profile, onPlay }: { id: string; profile: stri
         onError={() => setError(session.source_type === 'remote' ? 'The creator-hosted stream could not play. Check your connection or try another available quality. No unverified fallback provider will be used.' : 'Playback failed. Check the registered file and use a browser-compatible MP4 or WebM. No alternative streams will be fetched.')}>
         {session.subtitles.map((track, index) => <track key={track.name} kind="subtitles" src={getApiHref(track.url)} label={track.label} srcLang={/^[a-z]{2}$/.test(track.label) ? track.label : 'und'} default={index === 0} />)}
       </video>{waiting && <span className="movies-buffering" role="status">Buffering...</span>}
-    </div><div className="movies-player-options"><button onClick={() => void fullscreen()}>Fullscreen</button>
-      <button onClick={() => { if (video.current) video.current.currentTime = 0 }}>Start over</button>
+    </div><div className="movies-player-options"><button type="button" onClick={() => void fullscreen()}><FullscreenIcon className="yt-icon" />Fullscreen</button>
+      <button type="button" onClick={() => { if (video.current) video.current.currentTime = 0 }}><ReplayIcon className="yt-icon" />Start over</button>
       <label>Playback quality<select value={session.asset_id} onChange={async e => { const selected = e.target.value; setAutoStart(!video.current?.paused); video.current?.pause(); qualityPosition.current = video.current?.currentTime ?? 0; await checkpoint.current(); setAsset(selected) }}>{session.title.assets.filter(a => a.available).map(a => <option key={a.id} value={a.id}>{a.label} / {a.video_codec}</option>)}</select></label>
       {!!activeAsset?.intro_end && time >= (activeAsset.intro_start ?? 0) && time < activeAsset.intro_end && <button onClick={() => { if (video.current) video.current.currentTime = activeAsset.intro_end! }}>Skip intro</button>}
       <label>Speed<select defaultValue="1" onChange={e => { if (video.current) video.current.playbackRate = Number(e.target.value) }}>{[0.75, 1, 1.25, 1.5, 2].map(rate => <option key={rate} value={rate}>{rate}x</option>)}</select></label>
@@ -97,6 +109,6 @@ export function MoviePlayer({ id, profile, onPlay }: { id: string; profile: stri
     </div>{ended && <p role="status">{autoplay && next ? 'Next episode starts in five seconds. Turn off autoplay to cancel.' : 'Finished watching.'}</p>}
     {saveError && <div role="alert">{saveError} <button onClick={() => void checkpoint.current()}>Retry saving progress</button></div>}
     {session.title.online_source && <p className="movies-notice">{session.title.online_source.attribution} / <a href={session.title.online_source.licence_url} target="_blank" rel="noreferrer">{session.title.online_source.licence}</a>. Complete film credits retained.</p>}
-    <p className="movies-notice">Native video controls include volume, seeking and available subtitles. Quality choices are registered files or creator-provided variants, not automatic adaptive streaming. Space/K: play/pause; arrows: seek; F: fullscreen; M: mute.</p></>}
+    <p className="movies-hint">Native video controls include volume, seeking and available subtitles. Quality choices are registered files or creator-provided variants, not automatic adaptive streaming. Space/K: play/pause; arrows: seek; F: fullscreen; M: mute.</p></>}
   </div>
 }

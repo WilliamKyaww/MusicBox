@@ -32,7 +32,11 @@
   --yt-menu-shadow: 0 4px 32px rgba(0, 0, 0, 0.1);
   --yt-overlay: rgba(0, 0, 0, 0.5);
   --yt-skeleton: rgba(0, 0, 0, 0.08);
-  --yt-topbar-height: 56px;
+  /* One top-bar geometry for Video, Music and Movies, so the experience switch and
+     Settings button never move between pages (see the .app-controls rules). */
+  --app-topbar-height: 56px;
+  --app-topbar-gutter: 16px;
+  --yt-topbar-height: var(--app-topbar-height);
 
   --heading: 'Roboto', 'Segoe UI', Arial, sans-serif;
   --body: 'Roboto', 'Segoe UI', Arial, sans-serif;
@@ -91,6 +95,20 @@
 
 html {
   min-height: 100%;
+}
+
+/* Video and Movies scroll the window. Keep its scrollbar space reserved, so a page that
+   scrolls does not nudge the fixed top bar (and its controls) 15px to the left. Music
+   scrolls inside its panels and adds --scrollbar-width to its top-bar inset instead
+   (see scrollbar.ts), which puts the controls in the same place. */
+:root:not([data-experience='music']) {
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 560px) {
+  :root {
+    --app-topbar-gutter: 8px;
+  }
 }
 
 body {

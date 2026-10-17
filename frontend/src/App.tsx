@@ -1345,7 +1345,7 @@ function App() {
 
   return (
     <VideoActionsContext.Provider value={videoActions}>
-      {route.name === 'movies' ? <MoviesBoundary key={hash}><Suspense fallback={<p role="status">Loading Movies...</p>}><MoviesWorkspace route={route} onMoviePlay={() => getPlaybackControls()?.pause()} /></Suspense></MoviesBoundary> : route.name === 'music' ? <MusicWorkspace
+      {route.name === 'movies' ? <MoviesBoundary resetKey={hash}><Suspense fallback={<p role="status">Loading Movies...</p>}><MoviesWorkspace route={route} onMoviePlay={() => getPlaybackControls()?.pause()} /></Suspense></MoviesBoundary> : route.name === 'music' ? <MusicWorkspace
         route={route} playlists={playlists} downloads={downloadJobs} session={playerSession} currentVideo={currentVideo}
         playlistError={playlistsErrorMessage} busy={isCreatingPlaylist || isMutatingPlaylist}
         fullScreen={musicFullScreen} onFullScreenChange={setMusicFullScreen}

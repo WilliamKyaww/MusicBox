@@ -84,6 +84,35 @@ def decorate(repo, settings, item):
     return {**item, 'assets': assets, 'playable': any(a['available'] for a in assets)}
 
 
+def playable_show_ids(repo, settings):
+    """Shows with at least one episode that can actually be played."""
+    ids = set()
+    for item in repo.local_titles():
+        show_id = item.get('show_id')
+        if item['kind'] == 'episode' and show_id and show_id not in ids and decorate(repo, settings, item)['playable']:
+            ids.add(show_id)
+    return ids
+
+
+def finish(repo, settings, items):
+    """Decorate titles and flag the ones that can be watched here.
+
+    `playable` means this title has a playable file. A series never does itself, so
+    `watchable` also covers a series with at least one playable episode.
+    """
+    shows = None
+    result = []
+    for item in items:
+        item = decorate(repo, settings, item)
+        if item['kind'] == 'show':
+            shows = playable_show_ids(repo, settings) if shows is None else shows
+            item['watchable'] = item['id'] in shows
+        else:
+            item['watchable'] = item['playable']
+        result.append(item)
+    return result
+
+
 class ProfileInput(BaseModel):
     name: str = Field(min_length=1, max_length=40)
 
@@ -148,19 +177,34 @@ def catalogue(q: str = Query(default='', max_length=200), kind: Literal['all', '
     repo = repository(settings)
     free = open_films.catalogue(q, kind, genre) if settings.movies_free_streaming_enabled else []
     if source == 'free':
-        return {'items': [decorate(repo, settings, i) for i in free] if page == 1 else [], 'page': page, 'total_pages': 1, 'source': 'free'}
+        return {'items': finish(repo, settings, free) if page == 1 else [], 'page': page, 'total_pages': 1, 'source': 'free'}
     if source == 'local' or not settings.movies_tmdb_token:
         items = guarded(repo.local_titles)
         items = [i for i in items if i['kind'] != 'episode' and (kind == 'all' or i['kind'] == kind) and q.casefold() in i['title'].casefold()]
         if source != 'local':
             items = list({i['id']: i for i in [*free, *items]}.values())
-        return {'items': [decorate(repo, settings, i) for i in items[(page-1)*40:page*40]], 'page': page, 'total_pages': max(1, (len(items)+39)//40), 'source': 'local' if source == 'local' else 'hybrid'}
+        return {'items': finish(repo, settings, items[(page-1)*40:page*40]), 'page': page, 'total_pages': max(1, (len(items)+39)//40), 'source': 'local' if source == 'local' else 'hybrid'}
     result = guarded(TMDB(settings.movies_tmdb_token, settings.movies_region).browse, q, kind, page, category, genre)
-    result['items'] = [decorate(repo, settings, i) for i in result['items']]
+    result['items'] = finish(repo, settings, result['items'])
     if q and page == 1:
-        result['items'] = [decorate(repo, settings, i) for i in free] + result['items']
+        result['items'] = finish(repo, settings, free) + result['items']
     result['source'] = 'tmdb'
     return result
+
+
+@router.get('/library')
+def library(settings: Settings = Depends(active)):
+    """Every title that can be played here: free online films and registered local files.
+
+    Metadata-only titles are left out, so nothing listed from this endpoint is a dead end.
+    """
+    repo = repository(settings)
+    free = open_films.catalogue() if settings.movies_free_streaming_enabled else []
+    local = [i for i in guarded(repo.local_titles) if i['kind'] != 'episode']
+    pool = list({i['id']: i for i in [*free, *local]}.values())
+    items = [i for i in finish(repo, settings, pool) if i['watchable']]
+    items.sort(key=lambda i: (i['title'].casefold(), i['id']))
+    return {'items': items, 'total': len(items)}
 
 
 @router.get('/genres')
@@ -173,21 +217,23 @@ def genres(kind: Literal['movie', 'show'] = 'movie', source: Literal['online', '
 @router.get('/titles/{title_id}')
 def details(title_id: str, settings: Settings = Depends(active)):
     repo = repository(settings)
-    return decorate(repo, settings, guarded(title, repo, settings, title_id))
+    return finish(repo, settings, [guarded(title, repo, settings, title_id)])[0]
 
 
 @router.get('/titles/{title_id}/recommendations')
-def recommendations(title_id: str, settings: Settings = Depends(active)):
+def recommendations(title_id: str, playable: bool = False, settings: Settings = Depends(active)):
     repo = repository(settings)
     item = guarded(title, repo, settings, title_id)
     local = [i for i in repo.local_titles() if i['id'] != title_id and i['kind'] != 'episode']
     if settings.movies_free_streaming_enabled:
         local = list({i['id']: i for i in [*local, *open_films.catalogue()] if i['id'] != title_id}.values())
     local.sort(key=lambda i: len(set(i.get('genres', [])) & set(item.get('genres', []))), reverse=True)
+    if playable:
+        return [i for i in finish(repo, settings, local) if i['watchable']][:20]
     if title_id.startswith('tmdb:') and item['kind'] in ('movie', 'show') and settings.movies_tmdb_token:
         data = guarded(TMDB(settings.movies_tmdb_token).get, ('tv' if item['kind'] == 'show' else 'movie')+'/'+title_id.split(':')[-1]+'/recommendations')
         local = [normalise(i, item['kind']) for i in data.get('results', []) if not i.get('adult')] + local
-    return [decorate(repo, settings, i) for i in local[:20]]
+    return finish(repo, settings, local[:20])
 
 
 @router.get('/titles/{show_id}/seasons/{season}')
@@ -202,7 +248,7 @@ def episodes(show_id: str, season: int, settings: Settings = Depends(active)):
         items = guarded(TMDB(settings.movies_tmdb_token).episodes, show_id, season)
         for item in items:
             repo.save_title(item)
-    return [decorate(repo, settings, i) for i in items]
+    return finish(repo, settings, items)
 
 
 @router.post('/library', status_code=201)
@@ -220,7 +266,7 @@ def register_media(body: LocalInput, settings: Settings = Depends(write_access))
     if existing:
         if body.title_id and body.title_id != existing['title_id']:
             raise HTTPException(409, 'This file is already registered to another title.')
-        return decorate(repo, settings, guarded(title, repo, settings, existing['title_id']))
+        return finish(repo, settings, [guarded(title, repo, settings, existing['title_id'])])[0]
     if body.title_id:
         item = guarded(title, repo, settings, body.title_id)
         if item['kind'] == 'show':
@@ -245,7 +291,7 @@ def register_media(body: LocalInput, settings: Settings = Depends(write_access))
                 item = existing_episode
         repo.save_title(item)
     guarded(repo.add_asset, item['id'], relative, probe)
-    return decorate(repo, settings, item)
+    return finish(repo, settings, [item])[0]
 
 
 @router.delete('/assets/{asset_id}', status_code=204)
@@ -256,13 +302,13 @@ def forget_asset(asset_id: str, settings: Settings = Depends(write_access)):
 @router.get('/profiles/{profile_id}/watchlist')
 def watchlist(profile_id: str, settings: Settings = Depends(active)):
     repo = repository(settings)
-    return [decorate(repo, settings, i) for i in guarded(repo.list_saved, profile_id)]
+    return finish(repo, settings, guarded(repo.list_saved, profile_id))
 
 
 @router.get('/profiles/{profile_id}/history')
 def history(profile_id: str, settings: Settings = Depends(active)):
     repo = repository(settings)
-    return [decorate(repo, settings, i) for i in guarded(repo.list_saved, profile_id, True)]
+    return finish(repo, settings, guarded(repo.list_saved, profile_id, True))
 
 
 @router.delete('/profiles/{profile_id}/history', status_code=204)

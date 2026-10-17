@@ -1,5 +1,43 @@
-/* Components shared by the Video and Music experiences. Colours come from each
-   experience's tokens, except the top-bar controls, which look the same in both. */
+/* Components shared by the Video, Music and Movies experiences. Colours come from each
+   experience's tokens, except the top-bar controls, which look the same in all three. */
+
+/* ---------- Movies theme ----------
+   Like Music, Movies is always dark, whatever theme Video uses. It redefines the shared
+   tokens, so settings, status panels and other shared components follow it. */
+
+:root[data-experience='movies'] {
+  --bg: #0b0b0f;
+  --bg-deep: #101016;
+  --surface: #1a1a22;
+  --surface-strong: #22222c;
+  --surface-border: rgba(255, 255, 255, 0.12);
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --text-strong: #ffffff;
+  --text-muted: #b4b4c0;
+  --text-soft: #80808c;
+  --accent: #ff7a59;
+  --accent-strong: #ff9477;
+  --accent-bg: rgba(255, 122, 89, 0.16);
+  --panel-bg: #14141a;
+  --panel-inset: #22222c;
+  --card-bg: #15151c;
+  --input-bg: #1c1c24;
+  --danger-bg: rgba(255, 78, 69, 0.12);
+  --danger-border: rgba(255, 78, 69, 0.3);
+  --danger-color: #ff6b62;
+  --success-bg: rgba(24, 125, 95, 0.2);
+  --success-color: #50d4a8;
+  --yt-chip: rgba(255, 255, 255, 0.1);
+  --yt-chip-hover: rgba(255, 255, 255, 0.2);
+  --yt-chip-active: #f1f1f1;
+  --yt-chip-active-text: #0f0f0f;
+  --yt-menu-bg: #282828;
+  --yt-menu-shadow: 0 4px 32px rgba(0, 0, 0, 0.5);
+  --yt-skeleton: rgba(255, 255, 255, 0.1);
+  color-scheme: dark;
+  background: var(--bg);
+  color: var(--text-strong);
+}
 
 /* ---------- Top-bar controls (Video/Music switch and Settings) ----------
    Scoped under .app-controls so neither experience's broader rules can restyle them. */
@@ -20,7 +58,7 @@
   font-family: var(--chrome-font);
 }
 
-:root[data-theme='light']:not([data-experience='music']) .app-controls {
+:root[data-theme='light']:not([data-experience='music']):not([data-experience='movies']) .app-controls {
   --chrome-track: rgba(0, 0, 0, 0.05);
   --chrome-border: rgba(0, 0, 0, 0.1);
   --chrome-text: #606060;
@@ -100,8 +138,12 @@
 }
 
 @media (max-width: 560px) {
+  .app-controls {
+    gap: 4px;
+  }
+
   .app-controls .experience-switch button {
-    padding: 0 10px;
+    padding: 0 7px;
   }
 
   .app-controls .experience-switch svg {
@@ -225,6 +267,10 @@
 
 .settings-page--music .settings-nav {
   --settings-nav-top: 64px;
+}
+
+.settings-page--movies .settings-nav {
+  --settings-nav-top: calc(var(--app-topbar-height) + 88px);
 }
 
 .settings-page .settings-nav a {

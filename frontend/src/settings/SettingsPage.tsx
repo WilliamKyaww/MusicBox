@@ -557,7 +557,7 @@ export function SettingsPage({ experience }: { experience: Experience }) {
         <Section id="appearance" title="Appearance">
           <Row
             title="Video Theme"
-            description="Light or dark for the Video experience. Music always uses its dark theme."
+            description="Light or dark for the Video experience. Music and Movies always use their dark theme."
             control={
               <div className="settings-segmented" role="radiogroup" aria-label="Video theme">
                 {(['light', 'dark'] as const).map((value) => (

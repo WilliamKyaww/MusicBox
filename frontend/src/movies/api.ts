@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetchJson, apiFetchVoid } from '../api/client'
+import { ApiError, apiFetchJson, apiFetchVoid } from '../api/client'
 
 export type Progress = { position: number; duration: number; completed: boolean; updated_at: number }
 export type Movie = {
@@ -9,9 +9,16 @@ export type Movie = {
   seasons: { number: number; name: string; count: number }[]; trailer_url: string | null; provider_url: string | null
   assets: { id: string; label: string; available: boolean; duration: number; height: number; video_codec: string; audio_codec: string; intro_start?: number; intro_end?: number; source_type?: 'local' | 'remote' }[]
   online_source?: { provider: string; page_url: string; licence: string; licence_url: string; attribution: string; verified_on: string }
-  playable: boolean; progress?: Progress; show_id?: string; season?: number; episode?: number
+  /** Share of the picture's height to ignore top and bottom, for artwork with black bars baked in (CSS inset). */
+  art_inset?: string
+  /** This title has a playable file. A series never does itself; see `watchable`. */
+  playable: boolean
+  /** Playable here: a film or episode with a file, or a series with a playable episode. */
+  watchable?: boolean
+  progress?: Progress; show_id?: string; season?: number; episode?: number
 }
 export type Profile = { id: string; name: string; local_default: number }
+export type MovieLibraryResponse = { items: Movie[]; total: number }
 export type Catalogue = { items: Movie[]; page: number; total_pages: number; source: 'local' | 'tmdb' | 'hybrid' | 'free' }
 export type MovieSession = { session_id: string; title: Movie; asset_id: string; url: string; resume: number; duration: number; subtitles: { name: string; label: string; url: string }[]; source_type?: 'local' | 'remote' }
 const base = '/api/movies'
@@ -24,6 +31,7 @@ export const movieApi = {
 }
 export const idPath = (id: string) => encodeURIComponent(id)
 export const errorText = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Please try again.'
+export const errorStatus = (error: unknown) => error instanceof ApiError ? error.status : 0
 
 export function useMovieResource<T>(path: string | null) {
   const [version, setVersion] = useState(0)

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { SettingsPage } from '../settings/SettingsPage'
-import { StatusPanel } from '../components/StatusPanel'
-import { type Catalogue, type Movie, type Profile, errorText, movieApi, useMovieResource } from './api'
-import { MovieCard, MovieFailure, MovieLoading } from './ui'
+import { PageHeader } from '../components/PageHeader'
+import { type Movie, type Profile, errorText, movieApi } from './api'
+import { sourceOf } from './format'
+import { invalidateMovieLibrary, refreshMovieLibrary, useMovieLibrary } from './libraryStore'
+import { MovieCard, MovieEmpty, MovieFailure, MovieLoading } from './ui'
 import { moviesPath } from './routes'
 
 export function RegisterMovie({ target, onSaved, onCancel }: { target?: Movie; onSaved: (movie: Movie) => void; onCancel?: () => void }) {
@@ -18,6 +20,7 @@ export function RegisterMovie({ target, onSaved, onCancel }: { target?: Movie; o
           relative_path: data.get('path'), title_id: target?.id ?? null, rights_confirmed: data.get('rights') === 'on',
           show_title: data.get('show') || '', season: Number(data.get('season') || 1), episode: Number(data.get('episode') || 1),
           intro_start: Number(data.get('intro_start') || 0), intro_end: Number(data.get('intro_end') || 0) })
+        invalidateMovieLibrary()
         onSaved(result)
       } catch (error) { setError(errorText(error)) } finally { setBusy(false) }
     }}>
@@ -32,17 +35,22 @@ export function RegisterMovie({ target, onSaved, onCancel }: { target?: Movie; o
 }
 
 export function MovieLibrary() {
-  const result = useMovieResource<Catalogue>('/catalogue?source=local')
-  return <><RegisterMovie onSaved={movie => { window.location.hash = moviesPath('details', movie.id) }} /><h2>Your Collection</h2>
-    {result.loading && <MovieLoading />}{result.error && <MovieFailure text={result.error} retry={result.refresh} />}
-    <div className="movie-grid">{result.data?.items.map(item => <MovieCard key={item.id} movie={item} />)}</div>
-    {result.data?.items.length === 0 && <StatusPanel title="Your Cinema Starts Here" body="Register a film or episode above. No media is scanned, uploaded or supplied automatically." />}</>
+  const library = useMovieLibrary()
+  const mine = library.items?.filter(item => sourceOf(item) === 'collection')
+  return <div className="movies-page">
+    <PageHeader title="My Files" subtitle="Films and episodes you have added from your Movies media folder." />
+    <RegisterMovie onSaved={movie => { window.location.hash = moviesPath('details', movie.id) }} />
+    <h2>Your Collection</h2>
+    {!mine && !library.error && <MovieLoading />}{library.error && !mine && <MovieFailure text={library.error} retry={() => void refreshMovieLibrary()} />}
+    <div className="movie-grid">{mine?.map(item => <MovieCard key={item.id} movie={item} />)}</div>
+    {mine?.length === 0 && <MovieEmpty title="Your Cinema Starts Here" body="Register a film or episode above. No media is scanned, uploaded or supplied automatically." />}
+  </div>
 }
 
 export function MovieProfiles({ profiles, selected, onChange }: { profiles: Profile[]; selected: string; onChange: () => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  return <section className="movies-register"><h2>Who's Watching?</h2><p>Each local profile has its own list and viewing progress. Profiles are not password-protected accounts or parental controls.</p>
+  return <div className="movies-page"><PageHeader title="Who's Watching?" /><section className="movies-register"><p>Each local profile has its own list and viewing progress. Profiles are not password-protected accounts or parental controls.</p>
     {profiles.map(p => <div className="movies-profile-row" key={p.id}><strong>{p.name}{p.id === selected ? ' / active' : ''}</strong>{!p.local_default && <button onClick={async () => {
       if (!window.confirm(`Delete ${p.name} and their Movies history and list?`)) return
       try { await movieApi.delete(`/profiles/${p.id}`); onChange() } catch (e) { setError(errorText(e)) }
@@ -50,7 +58,7 @@ export function MovieProfiles({ profiles, selected, onChange }: { profiles: Prof
     <form onSubmit={async e => { e.preventDefault(); const form = e.currentTarget; setBusy(true); setError(''); try { await movieApi.post('/profiles', { name: new FormData(form).get('name') }); form.reset(); onChange() } catch (e) { setError(errorText(e)) } finally { setBusy(false) } }}>
       <label>New profile name<input name="name" required maxLength={40} /></label><button className="movies-action" disabled={busy || profiles.length >= 8}>Create profile</button>
     </form>{error && <MovieFailure text={error} />}
-  </section>
+  </section></div>
 }
 
-export function MovieSettings() { return <><p className="movies-notice">Movies settings are under Connections below. Free online films need no paid key or media folder. TMDB adds wider discovery, not commercial streams; local files remain an optional source. The other controls remain app-wide Video/Music settings.</p><SettingsPage experience="movies" /></> }
+export function MovieSettings() { return <div className="movies-page"><PageHeader title="Settings" subtitle="Connections, playback, appearance and privacy." /><p className="movies-notice">Movies settings are under Connections below. Free online films need no paid key or media folder. TMDB adds wider discovery, not commercial streams; local files remain an optional source. The other controls remain app-wide Video/Music settings.</p><SettingsPage experience="movies" /></div> }

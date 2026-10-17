@@ -24,20 +24,20 @@ async function checkMovies(window, report) {
     throw new Error('Movies smoke interface timeout: ' + selector)
   }
   for (const [route, selector] of [
-    ['#/movies/home', '.movies-feature'],
+    ['#/movies/home', '.movies-hero'],
     ['#/music/home', '.music-app'],
     ['#/', '.yt-topbar'],
     ['#/movies/settings', '.settings-page--movies'],
-    ['#/movies/home', '.movies-feature'],
+    ['#/movies/home', '.movies-hero'],
   ]) {
     await window.webContents.executeJavaScript(`location.hash = ${JSON.stringify(route)}`)
     await waitFor(selector)
   }
   await waitFor('.experience-switch button[title="Movies and TV experience"]')
-  await waitFor('html[data-experience="movies"] .movies-feature')
+  await waitFor('html[data-experience="movies"] .movies-hero')
   // DOM navigation can complete before Chromium presents the final frame.
   await new Promise((resolve) => setTimeout(resolve, 600))
-  const ready = await window.webContents.executeJavaScript(`location.hash === '#/movies/home' && !!document.querySelector('.movies-feature') && !!document.querySelector('.movies-secondary')`)
+  const ready = await window.webContents.executeJavaScript(`location.hash === '#/movies/home' && !!document.querySelector('.movies-hero') && !!document.querySelector('.movies-header')`)
   if (!ready) throw new Error('Movies preview did not settle in its enabled state')
   if (process.env.MUSICBOX_SMOKE_MOVIE_FILE) {
     const path = require('node:path')
@@ -68,7 +68,7 @@ async function checkMovies(window, report) {
     if (!saved) throw new Error('Movie progress did not persist in packaged backend')
     report('MUSICBOX_MOVIE_PLAYBACK_OK')
     await window.webContents.executeJavaScript(`location.hash = '#/movies/home'`)
-    await waitFor('.movies-feature')
+    await waitFor('.movies-hero')
     await new Promise(resolve => setTimeout(resolve, 600))
   }
   report('MUSICBOX_MOVIES_CHECK_OK ' + JSON.stringify(result))

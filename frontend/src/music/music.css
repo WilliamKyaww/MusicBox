@@ -59,7 +59,7 @@
   position: relative;
   display: grid;
   grid-template-columns: var(--library-width) minmax(0, 1fr);
-  grid-template-rows: 64px minmax(0, 1fr);
+  grid-template-rows: var(--app-topbar-height) minmax(0, 1fr);
   gap: 8px;
   padding: 0 8px;
   height: calc(100dvh - var(--music-player-height) - 8px);
@@ -73,7 +73,7 @@
 }
 /* The dividers sit in the 8px gaps between the panels. */
 .music-resize {
-  top: 72px;
+  top: calc(var(--app-topbar-height) + 8px);
   bottom: 0;
 }
 .music-resize--library {
@@ -300,7 +300,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 8px 0;
+  padding: 0 calc(var(--app-topbar-gutter) - 8px + var(--scrollbar-width, 0px)) 0 8px;
   min-width: 0;
 }
 .music-brand {
@@ -2953,7 +2953,7 @@
   }
   .music-panel {
     position: fixed;
-    top: 72px;
+    top: calc(var(--app-topbar-height) + 8px);
     right: 8px;
     bottom: calc(var(--music-player-height) + 8px);
     z-index: 120;
@@ -2989,7 +2989,7 @@
   }
   .music-library--open {
     position: fixed;
-    top: 72px;
+    top: calc(var(--app-topbar-height) + 8px);
     left: 8px;
     bottom: calc(var(--music-player-height) + 8px);
     z-index: 130;
@@ -3040,10 +3040,15 @@
   .music-app--idle {
     height: calc(100dvh - 64px);
   }
+  /* The first row keeps the shared top-bar height; the search box wraps below it. */
   .music-topbar {
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 8px 12px;
+    gap: 0 8px;
+    padding: 0 calc(var(--app-topbar-gutter) + var(--scrollbar-width, 0px)) 8px var(--app-topbar-gutter);
+  }
+  .music-brand,
+  .music-topbar__end {
+    height: var(--app-topbar-height);
   }
   .music-topbar__center {
     order: 5;
@@ -3060,10 +3065,6 @@
     margin-right: auto;
     padding: 0;
   }
-  .music-topbar .experience-switch button {
-    padding: 6px 10px;
-  }
-  .music-topbar .experience-switch svg,
   .music-private span {
     display: none;
   }
